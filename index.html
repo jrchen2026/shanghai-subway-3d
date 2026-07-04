@@ -125,10 +125,23 @@
     #routeBox { top: auto; bottom: 58px; }
   }
   @media (max-width: 640px) {
-    #title { left: 14px; top: 14px; }
-    #controls { right: 14px; top: 14px; }
+    #title { left: 14px; top: 14px; max-width: 72vw; }
+    #title .sub { display: none; }
+    #stats { font-size: 11px; }
+    #controls { right: 14px; top: 14px; gap: 6px; }
+    button.tgl { font-size: 11px; padding: 6px 10px; }
+    #controls .row { padding: 6px 10px; }
+    #speed { width: 68px; }
     #hint { display: none; }
-    #legend { bottom: 12px; }
+    /* 徽章栏：单行横向滑动，不再换行占屏 */
+    #legend { bottom: 10px; left: 10px; right: 10px; transform: none;
+      max-width: none; flex-wrap: nowrap; justify-content: flex-start;
+      overflow-x: auto; scrollbar-width: none; }
+    #legend::-webkit-scrollbar { display: none; }
+    .chip, #selName { flex: none; }
+    /* 查询框：通栏置于徽章栏上方 */
+    #routeBox { bottom: 56px; left: 10px; right: 10px; transform: none; }
+    #routeBox input { flex: 1; width: auto; min-width: 0; }
     #routeCard { display: none; }
   }
 </style>
