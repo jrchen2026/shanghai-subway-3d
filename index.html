@@ -486,7 +486,7 @@ function renderCard() {
   route.legs.forEach((g, i) => {
     const L = lines[g.li];
     if (i) h += `<div class="rc-tr">↳ ${g.from} 站内换乘</div>`;
-    h += `<div class="rc-leg"><span class="badge" style="background:${L.color};color:${darkText(L.color) ? "#101820" : "#fff"}">${L.num}</span><span>${L.name}&ensp;${g.from} → ${g.to}<span style="color:var(--muted)">（${g.idx.length - 1}站）</span></span></div>`;
+    h += `<div class="rc-leg"><span class="badge" style="background:${L.color};color:${darkText(L.color) ? "#101820" : "#fff"}">${L.num}</span><span>${L.name}&ensp;${g.from} → ${g.to}<span style="color:var(--muted);white-space:nowrap">（${g.idx.length - 1}站）</span></span></div>`;
   });
   h += `<div class="rc-foot">共 ${route.stops} 站 · 换乘 ${route.transfers.length} 次 · 约 ${route.km.toFixed(1)} km · 预计 ${mins} 分钟</div>`;
   card.innerHTML = h; card.hidden = false;
@@ -718,21 +718,21 @@ function frame(now) {
     // 起终点 + 换乘标注
     ctx.font = "11px Bahnschrift, 'Microsoft YaHei', sans-serif";
     ctx.textAlign = "center";
-    const placedR = []; // 起终点优先占位，换乘标注冲突则不画字
-    const mark = (name, txt, col, must) => {
+    const mark = (name, txt, col) => { // 起终点：立杆 + 顶部文字
       const st = stMap.get(name);
       const g0 = proj(st.x, st.y, 0), h0 = proj(st.x, st.y, 2.8);
-      const lx = h0[0], ly = h0[1] - 6;
-      if (!must && placedR.some(p => Math.abs(p[0] - lx) < 96 && Math.abs(p[1] - ly) < 15)) return;
-      placedR.push([lx, ly]);
       ctx.strokeStyle = "rgba(141,160,188,0.5)"; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(g0[0], g0[1]); ctx.lineTo(h0[0], h0[1]); ctx.stroke();
-      ctx.fillStyle = col; ctx.fillText(txt, lx, ly);
+      ctx.fillStyle = col; ctx.fillText(txt, h0[0], h0[1] - 6);
     };
-    mark(selA, "▲ " + selA, "#7fe08f", true);
-    mark(selB, "▼ " + selB, "#ff8f7f", true);
-    route.legs.slice(1).forEach(g =>
-      mark(g.from, `⇋ ${g.from} 换乘${lines[g.li].name}`, "rgba(233,238,246,0.92)", false));
+    mark(selA, "▲ " + selA, "#7fe08f");
+    mark(selB, "▼ " + selB, "#ff8f7f");
+    // 换乘文字放光环下方，不与顶部标注抢位
+    route.legs.slice(1).forEach(g => {
+      const m = proj(g.pts[0][0], g.pts[0][1], 0);
+      ctx.fillStyle = "rgba(233,238,246,0.92)";
+      ctx.fillText(`⇋ ${g.from} 换乘${lines[g.li].name}`, m[0], m[1] + 24);
+    });
   }
 
   // 地名标注（立杆 + 文字）
