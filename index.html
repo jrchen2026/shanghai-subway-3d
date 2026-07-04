@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>上海轨道交通 · 全网 3D</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #060a13;
+    --panel: rgba(10, 16, 28, 0.72);
+    --panel-line: rgba(140, 170, 210, 0.16);
+    --ink: #e9eef6;
+    --muted: #8da0bc;
+    --faint: #55677f;
+    --accent: #e3002a;
+    font-family: Bahnschrift, "DIN Alternate", "Helvetica Neue", "Segoe UI",
+      "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--ink); overflow: hidden; }
+  #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block;
+    cursor: grab; touch-action: none; }
+  #scene.dragging { cursor: grabbing; }
+
+  .hud { position: fixed; z-index: 2; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--panel-line);
+    border-radius: 10px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  }
+
+  #title { top: 20px; left: 22px; pointer-events: none; max-width: min(72vw, 420px); }
+  #title .eyebrow {
+    font-size: 11px; letter-spacing: 0.32em; color: var(--muted);
+    text-transform: uppercase; margin-bottom: 6px;
+  }
+  #title h1 {
+    margin: 0; font-size: clamp(22px, 4.2vw, 34px); font-weight: 700;
+    letter-spacing: 0.04em; line-height: 1.15; text-wrap: balance;
+  }
+  #title h1 .dot { color: var(--accent); }
+  #title .sub { margin-top: 8px; font-size: 12px; color: var(--muted); line-height: 1.6; }
+  #stats {
+    margin-top: 10px; font-size: 12px; color: var(--faint);
+    font-variant-numeric: tabular-nums; letter-spacing: 0.06em;
+  }
+
+  #controls { top: 20px; right: 22px; display: flex; flex-direction: column;
+    gap: 10px; align-items: flex-end; }
+  #controls .row { display: flex; gap: 8px; align-items: center; padding: 8px 12px; }
+  button.tgl {
+    font: inherit; font-size: 12px; letter-spacing: 0.08em; color: var(--muted);
+    background: var(--panel); border: 1px solid var(--panel-line); border-radius: 10px;
+    padding: 8px 14px; cursor: pointer; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  }
+  button.tgl:hover { color: var(--ink); border-color: rgba(140, 170, 210, 0.35); }
+  button.tgl[aria-pressed="true"] { color: var(--ink); border-color: rgba(233, 238, 246, 0.5); }
+  button.tgl:focus-visible, .chip:focus-visible {
+    outline: 2px solid #e9eef6; outline-offset: 2px;
+  }
+  #speedRow label { font-size: 11px; letter-spacing: 0.14em; color: var(--muted); }
+  #speed { width: 110px; accent-color: #8da0bc; }
+
+  #legend {
+    bottom: 14px; left: 50%; transform: translateX(-50%);
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+    gap: 5px; padding: 6px 10px; max-width: 94vw;
+    transition: opacity 0.25s;
+  }
+  #legend.faded { opacity: 0.12; }
+  #selName {
+    font-size: 12px; color: var(--muted); letter-spacing: 0.06em;
+    padding-right: 7px; border-right: 1px solid var(--panel-line); margin-right: 3px;
+    white-space: nowrap;
+  }
+  .chip {
+    display: block; cursor: pointer; border: 1px solid transparent;
+    background: none; padding: 2px; border-radius: 8px; font: inherit;
+  }
+  .chip:hover { border-color: rgba(233, 238, 246, 0.4); }
+  .chip[aria-pressed="true"] { border-color: rgba(233, 238, 246, 0.85); }
+  .chip .badge {
+    width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center;
+    font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+  }
+  .chip.dimmed { opacity: 0.32; }
+
+  #hint {
+    bottom: 18px; right: 22px; font-size: 11px; color: var(--faint);
+    letter-spacing: 0.08em; pointer-events: none; text-align: right; line-height: 1.7;
+  }
+
+  #tip {
+    position: fixed; z-index: 3; pointer-events: none; display: none;
+    background: rgba(8, 13, 24, 0.92); border: 1px solid var(--panel-line);
+    border-radius: 8px; padding: 6px 10px; font-size: 12px; line-height: 1.5;
+    max-width: 240px;
+  }
+  #tip .tname { font-weight: 700; letter-spacing: 0.04em; }
+  #tip .tlines { color: var(--muted); font-size: 11px; margin-top: 2px; }
+
+  #routeBox { top: 20px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 6px; align-items: center; padding: 7px 9px; }
+  #routeBox input { font: inherit; font-size: 12px; color: var(--ink);
+    background: rgba(233,238,246,0.05); border: 1px solid var(--panel-line);
+    border-radius: 7px; padding: 6px 9px; width: 104px; }
+  #routeBox input::placeholder { color: var(--faint); }
+  #routeBox input:focus { outline: none; border-color: rgba(233,238,246,0.5); }
+  .rbtn { font: inherit; font-size: 13px; color: var(--muted); background: none;
+    border: 1px solid transparent; border-radius: 7px; padding: 5px 7px; cursor: pointer; }
+  .rbtn:hover { color: var(--ink); border-color: rgba(140,170,210,0.35); }
+
+  #routeCard { top: 210px; left: 22px; width: 240px; padding: 12px 14px;
+    font-size: 12px; line-height: 1.6; max-height: calc(100vh - 330px); overflow-y: auto; }
+  #routeCard .rc-head { font-weight: 700; font-size: 13px; letter-spacing: 0.04em; margin-bottom: 8px; }
+  #routeCard .rc-leg { display: flex; gap: 7px; align-items: baseline; margin: 4px 0; }
+  #routeCard .rc-leg .badge { flex: none; width: 18px; height: 18px; border-radius: 5px;
+    display: inline-grid; place-items: center; font-size: 11px; font-weight: 700;
+    transform: translateY(3px); }
+  #routeCard .rc-tr { color: var(--muted); font-size: 11px; margin: 2px 0 2px 25px; }
+  #routeCard .rc-foot { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--panel-line);
+    color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  @media (max-width: 960px) {
+    #routeBox { top: auto; bottom: 58px; }
+  }
+  @media (max-width: 640px) {
+    #title { left: 14px; top: 14px; }
+    #controls { right: 14px; top: 14px; }
+    #hint { display: none; }
+    #legend { bottom: 12px; }
+    #routeCard { display: none; }
+  }
+</style>
+</head>
+<body>
+<canvas id="scene" aria-label="上海轨道交通全网三维动态图"></canvas>
+
+<div class="hud" id="title">
+  <div class="eyebrow">Shanghai Metro &middot; Night Network</div>
+  <h1>上海轨道交通<span class="dot"> · </span>全网</h1>
+  <div class="sub">流动的光点是运行中的列车。拖拽旋转视角，滚轮或双指缩放，点击下方线路徽章可单独点亮一条线。</div>
+  <div id="stats"></div>
+</div>
+
+<div class="hud" id="controls">
+  <button class="tgl" id="rotBtn" aria-pressed="false">环绕 关</button>
+  <div class="row panel" id="speedRow">
+    <label for="speed">车速</label>
+    <input type="range" id="speed" min="0" max="3" step="0.1" value="1">
+  </div>
+</div>
+
+<div class="hud panel" id="routeBox" role="search" aria-label="换乘查询">
+  <input id="stA" list="stList" placeholder="出发站" autocomplete="off" aria-label="出发站">
+  <button class="rbtn" id="swapBtn" title="交换起终点" aria-label="交换起终点">⇄</button>
+  <input id="stB" list="stList" placeholder="到达站" autocomplete="off" aria-label="到达站">
+  <button class="rbtn" id="routeClear" title="清除路径" aria-label="清除路径">✕</button>
+</div>
+<datalist id="stList"></datalist>
+<div class="hud panel" id="routeCard" hidden></div>
+
+<div class="hud panel" id="legend" role="group" aria-label="线路筛选"><span id="selName">全网</span></div>
+
+<div class="hud" id="hint">拖拽 旋转 &middot; Shift+拖拽 平移<br>滚轮 / 双指 缩放 &middot; 点击车站 设起终点</div>
+
+<div id="tip"><div class="tname"></div><div class="tlines"></div></div>
+
+<script>
+"use strict";
+const DATA = [{"name":"1号线","color":"#E3002A","st":[[121.38537,31.11115,1,"莘庄"],[121.39302,31.1209,0,"外环路"],[121.40291,31.1309,0,"莲花路"],[121.41411,31.14222,0,"锦江乐园"],[121.43004,31.15458,1,"上海南站"],[121.43314,31.16834,1,"漕宝路"],[121.43742,31.18281,1,"上海体育馆"],[121.4366,31.19551,1,"徐家汇"],[121.44642,31.20453,0,"衡山路"],[121.44914,31.21352,1,"常熟路"],[121.45874,31.21515,1,"陕西南路"],[121.4729,31.2239,1,"一大会址·黄陂南路"],[121.47511,31.23269,1,"人民广场"],[121.46815,31.23837,0,"新闸路"],[121.4587,31.24188,1,"汉中路"],[121.45794,31.24963,1,"上海火车站"],[121.4592,31.25889,0,"中山北路"],[121.45533,31.27167,0,"延长路"],[121.45202,31.27989,0,"上海马戏城"],[121.45025,31.29256,0,"汶水路"],[121.44864,31.3066,0,"彭浦新村"],[121.44706,31.31894,0,"共康路"],[121.44155,31.33113,0,"通河新村"],[121.43771,31.3397,0,"呼兰路"],[121.43406,31.35508,0,"共富新村"],[121.43091,31.36955,0,"宝安公路"],[121.42795,31.3813,0,"友谊西路"],[121.42466,31.39226,0,"富锦路"]]},{"name":"2号线","color":"#86B81C","st":[[121.80559,31.15096,1,"浦东1号2号航站楼"],[121.79688,31.16846,0,"海天三路"],[121.7553,31.19938,0,"远东大道"],[121.7241,31.19286,0,"凌空路"],[121.69821,31.18674,0,"川沙"],[121.68097,31.19657,0,"华夏东路"],[121.67371,31.21387,0,"创新中路"],[121.65627,31.21411,0,"唐镇"],[121.62107,31.21105,0,"广兰路"],[121.60199,31.20421,0,"金科路"],[121.58749,31.20187,0,"张江高科"],[121.55763,31.20358,1,"龙阳路"],[121.55091,31.20942,0,"世纪公园"],[121.54444,31.21882,0,"上海科技馆"],[121.52721,31.22868,1,"世纪大道"],[121.51556,31.23327,0,"浦东南路(原东昌路)"],[121.50213,31.23826,1,"陆家嘴"],[121.48463,31.2381,1,"南京东路"],[121.47511,31.23269,1,"人民广场"],[121.45997,31.22985,1,"南京西路"],[121.44653,31.22323,1,"静安寺"],[121.43064,31.22041,1,"江苏路"],[121.41577,31.21795,1,"中山公园"],[121.40406,31.21116,1,"娄山关路"],[121.38729,31.21487,0,"威宁路"],[121.374,31.21639,0,"北新泾"],[121.35954,31.21823,1,"淞虹路"],[121.32444,31.19405,1,"虹桥2号航站楼"],[121.31895,31.19402,1,"虹桥火车站"],[121.2992,31.18837,0,"国家会展中心(2号线)"],[121.28614,31.18139,0,"蟠祥路·国家会计学院"]]},{"name":"3号线","color":"#FCD600","st":[[121.43982,31.40786,0,"江杨北路"],[121.46114,31.40812,0,"铁力路"],[121.47592,31.40402,0,"友谊路"],[121.47957,31.39532,0,"宝杨路"],[121.48825,31.3813,0,"水产路"],[121.49282,31.37093,0,"淞滨路"],[121.49867,31.35802,0,"张华浜"],[121.50039,31.34513,0,"淞发路"],[121.49148,31.33206,1,"长江南路"],[121.48486,31.32,0,"殷高西路"],[121.48506,31.30557,0,"江湾镇"],[121.48322,31.28943,0,"大柏树"],[121.48243,31.28125,0,"赤峰路"],[121.47915,31.27139,1,"虹口足球场"],[121.4802,31.25989,0,"东宝兴路"],[121.4763,31.25152,1,"宝山路"],[121.45794,31.24963,1,"上海火车站"],[121.441,31.25457,1,"中潭路"],[121.42978,31.24637,1,"镇坪路"],[121.4177,31.2393,1,"曹杨路"],[121.4132,31.23215,1,"金沙江路"],[121.41577,31.21795,1,"中山公园"],[121.41706,31.20962,1,"延安西路"],[121.42081,31.19752,1,"虹桥路"],[121.42719,31.18672,1,"宜山路"],[121.43841,31.17675,0,"漕溪路"],[121.44438,31.16946,1,"龙漕路"],[121.44321,31.15795,0,"石龙路"],[121.43004,31.15458,1,"上海南站"]]},{"name":"4号线","color":"#5A2B8D","st":[[121.42719,31.18672,1,"宜山路"],[121.42081,31.19752,1,"虹桥路"],[121.41706,31.20962,1,"延安西路"],[121.41577,31.21795,1,"中山公园"],[121.4132,31.23215,1,"金沙江路"],[121.4177,31.2393,1,"曹杨路"],[121.42978,31.24637,1,"镇坪路"],[121.441,31.25457,1,"中潭路"],[121.45794,31.24963,1,"上海火车站"],[121.4763,31.25152,1,"宝山路"],[121.4887,31.2593,1,"海伦路"],[121.5007,31.26087,0,"临平路"],[121.51309,31.25794,1,"大连路"],[121.51721,31.25193,0,"杨树浦路"],[121.5193,31.24031,1,"浦东大道"],[121.52721,31.22868,1,"世纪大道"],[121.53208,31.22228,0,"向城路"],[121.52763,31.21167,1,"蓝村路"],[121.51869,31.20976,0,"塘桥"],[121.49972,31.2085,0,"南浦大桥"],[121.48955,31.20197,1,"西藏南路"],[121.47515,31.19922,0,"鲁班路"],[121.46328,31.19406,1,"大木桥路"],[121.4549,31.19082,1,"东安路"],[121.44353,31.1856,0,"上海体育场"],[121.43742,31.18281,1,"上海体育馆"]]},{"name":"5号线","color":"#96499A","st":[[121.38537,31.11115,1,"莘庄"],[121.38582,31.09825,0,"春申路"],[121.39026,31.08935,0,"银都路"],[121.40187,31.06701,0,"颛桥"],[121.41005,31.04511,0,"北桥"],[121.41658,31.02648,0,"剑川路"],[121.4199,31.0182,0,"东川路"],[121.42347,31.00543,0,"江川路"],[121.43244,30.98935,0,"西渡"],[121.44186,30.96589,0,"萧塘"],[121.44898,30.94205,0,"奉浦大道"],[121.4632,30.93117,0,"环城东路"],[121.48358,30.93194,0,"望园路"],[121.49251,30.92881,0,"金海湖"],[121.49629,30.91392,0,"奉贤新城"]]},{"name":"6号线","color":"#F0087D","st":[[121.4803,31.15337,1,"东方体育中心"],[121.49529,31.14867,0,"灵岩南路"],[121.50645,31.14882,0,"上南路"],[121.51454,31.14988,0,"华夏西路"],[121.51579,31.15991,0,"高青路"],[121.51087,31.17265,1,"东明路"],[121.50984,31.18576,1,"高科西路"],[121.51669,31.1932,0,"临沂新村"],[121.52348,31.20328,0,"上海儿童医学中心"],[121.52763,31.21167,1,"蓝村路"],[121.52935,31.22015,0,"浦电路"],[121.52721,31.22868,1,"世纪大道"],[121.53464,31.233,0,"源深体育中心"],[121.54353,31.23585,1,"民生路"],[121.55231,31.23915,0,"北洋泾路"],[121.56424,31.2454,0,"德平路"],[121.57115,31.25097,1,"云山路"],[121.58182,31.25708,0,"金桥路"],[121.58669,31.26352,0,"博兴路"],[121.58787,31.27202,0,"五莲路"],[121.58836,31.28068,1,"巨峰路"],[121.58874,31.29068,0,"东靖路"],[121.58921,31.30257,0,"五洲大道"],[121.5894,31.31223,0,"洲海路"],[121.60196,31.32158,0,"外高桥保税区南"],[121.59397,31.33537,0,"航津路"],[121.58693,31.3478,0,"外高桥保税区北"],[121.57502,31.35322,1,"港城路"]]},{"name":"7号线","color":"#EE782E","st":[[121.56275,31.21121,0,"花木路"],[121.55763,31.20358,1,"龙阳路"],[121.55012,31.19311,0,"芳华路"],[121.54004,31.18759,0,"锦绣路"],[121.52454,31.18761,0,"杨高南路"],[121.50984,31.18576,1,"高科西路"],[121.50044,31.18221,0,"云台路"],[121.49461,31.17851,1,"耀华路"],[121.48777,31.17445,1,"长清路"],[121.47376,31.17192,0,"后滩"],[121.45706,31.18438,1,"龙华中路"],[121.4549,31.19082,1,"东安路"],[121.45021,31.19944,1,"肇嘉浜路"],[121.44914,31.21352,1,"常熟路"],[121.44653,31.22323,1,"静安寺"],[121.44262,31.23375,0,"昌平路"],[121.43827,31.24086,1,"长寿路"],[121.42978,31.24637,1,"镇坪路"],[121.42194,31.2562,0,"岚皋路"],[121.42267,31.26385,0,"新村路"],[121.42295,31.27405,0,"大华三路"],[121.42177,31.2845,0,"行知路"],[121.41616,31.29326,0,"大场镇"],[121.41346,31.30368,0,"场中路"],[121.40869,31.31497,0,"上大路"],[121.39842,31.32174,0,"南陈路"],[121.38888,31.32059,0,"上海大学"],[121.37353,31.32239,0,"祁华路"],[121.37301,31.34459,1,"顾村公园"],[121.36238,31.35759,0,"刘行"],[121.35585,31.36418,0,"潘广路"],[121.35747,31.38883,0,"罗南新村"],[121.34989,31.40189,0,"美兰湖"]]},{"name":"8号线","color":"#01A2E2","st":[[121.51227,31.06143,1,"沈杜公路"],[121.51059,31.07357,0,"联航路"],[121.5086,31.08425,0,"江月路"],[121.50627,31.09659,0,"浦江镇"],[121.49826,31.11907,0,"芦恒路"],[121.48966,31.1413,0,"凌兆新村"],[121.4803,31.15337,1,"东方体育中心"],[121.49344,31.16105,0,"杨思"],[121.49622,31.17074,1,"成山路"],[121.49461,31.17851,1,"耀华路"],[121.49363,31.18524,0,"中华艺术宫"],[121.48955,31.20197,1,"西藏南路"],[121.48611,31.21179,1,"陆家浜路"],[121.48379,31.21901,1,"老西门"],[121.47918,31.22739,1,"大世界"],[121.47511,31.23269,1,"人民广场"],[121.47154,31.24231,1,"曲阜路"],[121.46903,31.25323,0,"中兴路"],[121.46882,31.26345,0,"西藏北路"],[121.47915,31.27139,1,"虹口足球场"],[121.49114,31.27652,0,"曲阳路"],[121.50149,31.27488,1,"四平路"],[121.50969,31.27324,0,"鞍山新村"],[121.51838,31.27495,1,"江浦路"],[121.5284,31.27881,0,"黄兴路"],[121.53494,31.28854,0,"延吉中路"],[121.53338,31.29539,0,"黄兴公园"],[121.53197,31.305,0,"翔殷路"],[121.53195,31.3148,0,"嫩江路"],[121.53193,31.32272,0,"市光路"]]},{"name":"9号线","color":"#69C7F4","st":[[121.68315,31.2713,0,"曹路"],[121.66813,31.26834,0,"民雷路"],[121.65646,31.26607,0,"顾唐路"],[121.63863,31.26314,1,"金海路"],[121.62874,31.2643,0,"金吉路"],[121.61134,31.26085,0,"金桥"],[121.59746,31.25283,0,"台儿庄路"],[121.578,31.24103,1,"蓝天路"],[121.55843,31.23184,0,"芳甸路"],[121.54866,31.22751,1,"杨高中路"],[121.52721,31.22868,1,"世纪大道"],[121.51627,31.23026,0,"商城路"],[121.4984,31.21687,0,"小南门"],[121.48611,31.21179,1,"陆家浜路"],[121.47726,31.20952,1,"马当路"],[121.46868,31.20631,0,"打浦桥"],[121.4607,31.20282,1,"嘉善路"],[121.45021,31.19944,1,"肇嘉浜路"],[121.4366,31.19551,1,"徐家汇"],[121.42719,31.18672,1,"宜山路"],[121.41806,31.17479,1,"桂林路"],[121.39777,31.17064,0,"漕河泾开发区"],[121.38477,31.16654,0,"合川路"],[121.3689,31.15811,0,"星中路"],[121.34922,31.15529,0,"七宝"],[121.3346,31.14977,1,"中春路"],[121.31942,31.13725,0,"九亭"],[121.26025,31.11827,0,"泗泾"],[121.22969,31.1041,0,"佘山"],[121.23047,31.08449,0,"洞泾"],[121.23258,31.05398,0,"松江大学城"],[121.23074,31.03029,0,"松江新城"],[121.23055,31.01601,0,"松江体育中心"],[121.22936,31.00112,0,"醉白池"],[121.23088,30.98482,0,"上海松江站"]]},{"name":"10号线","color":"#C6AFD4","st":[[121.59041,31.35131,0,"基隆路"],[121.57502,31.35322,1,"港城路"],[121.56297,31.35262,0,"高桥"],[121.54928,31.35149,0,"高桥西"],[121.53942,31.3536,0,"双江路"],[121.51317,31.33955,0,"国帆路"],[121.50695,31.3285,0,"新江湾城"],[121.5068,31.32177,0,"殷高东路"],[121.50834,31.31321,0,"三门路"],[121.51331,31.30429,0,"江湾体育场"],[121.51463,31.29804,1,"五角场"],[121.51002,31.28928,1,"国权路"],[121.50636,31.28209,0,"同济大学"],[121.50149,31.27488,1,"四平路"],[121.49425,31.26843,0,"邮电新村"],[121.4887,31.2593,1,"海伦路"],[121.48421,31.25203,0,"四川北路"],[121.48232,31.24382,1,"天潼路"],[121.48463,31.2381,1,"南京东路"],[121.48743,31.228,1,"豫园"],[121.48379,31.21901,1,"老西门"],[121.47518,31.21637,1,"一大会址·新天地"],[121.45874,31.21515,1,"陕西南路"],[121.44436,31.20796,0,"上海图书馆"],[121.43525,31.20221,1,"交通大学"],[121.42081,31.19752,1,"虹桥路"],[121.41208,31.19654,0,"宋园路"],[121.4039,31.19888,0,"伊犁路"],[121.39226,31.19948,0,"水城路"],[121.38003,31.1944,0,"龙溪路"],[121.36814,31.19025,0,"上海动物园"],[121.34737,31.19136,1,"虹桥1号航站楼"],[121.32444,31.19405,1,"虹桥2号航站楼"],[121.31895,31.19402,1,"虹桥火车站"]]},{"name":"11号线","color":"#871C2A","st":[[121.66796,31.14126,0,"迪士尼"],[121.6172,31.13044,0,"康新公路"],[121.59839,31.13813,0,"秀沿路"],[121.59315,31.15326,1,"罗山路"],[121.57091,31.15813,1,"御桥"],[121.5537,31.15423,0,"康恒路"],[121.53901,31.15086,0,"浦三路"],[121.523,31.14646,0,"三林东"],[121.5118,31.14322,0,"三林"],[121.4803,31.15337,1,"东方体育中心"],[121.4597,31.15972,0,"龙耀路"],[121.45852,31.16649,0,"云锦路"],[121.45296,31.17267,1,"龙华"],[121.44142,31.17912,0,"上海游泳馆"],[121.4366,31.19551,1,"徐家汇"],[121.43525,31.20221,1,"交通大学"],[121.43064,31.22041,1,"江苏路"],[121.42358,31.23051,1,"隆德路"],[121.4177,31.2393,1,"曹杨路"],[121.4114,31.24185,0,"枫桥路"],[121.40722,31.25077,1,"真如"],[121.40093,31.26269,1,"上海西站"],[121.38997,31.26902,0,"李子园"],[121.37604,31.27165,0,"祁连山路"],[121.36468,31.27665,0,"武威路"],[121.34962,31.2816,0,"桃浦新村"],[121.32314,31.29695,0,"南翔"],[121.30679,31.30648,0,"陈翔公路"],[121.27691,31.31968,0,"马陆"],[121.25429,31.33006,0,"嘉定新城"],[121.2261,31.3319,0,"上海赛车场"],[121.20038,31.29362,0,"昌吉东路"],[121.18074,31.2854,0,"上海汽车城"],[121.16199,31.28849,0,"安亭"],[121.15032,31.28905,0,"兆丰路"],[121.11719,31.29621,0,"光明路"],[121.10441,31.29879,0,"花桥"]]},{"name":"12号线","color":"#007A61","st":[[121.36246,31.13163,0,"七莘路"],[121.38035,31.13745,0,"虹莘路"],[121.39185,31.14089,0,"顾戴路"],[121.39192,31.15583,0,"东兰路"],[121.39725,31.16035,0,"虹梅路"],[121.41055,31.16403,0,"虹漕路"],[121.41965,31.16699,1,"桂林公园"],[121.43314,31.16834,1,"漕宝路"],[121.44438,31.16946,1,"龙漕路"],[121.45296,31.17267,1,"龙华"],[121.45706,31.18438,1,"龙华中路"],[121.46328,31.19406,1,"大木桥路"],[121.4607,31.20282,1,"嘉善路"],[121.45874,31.21515,1,"陕西南路"],[121.45997,31.22985,1,"南京西路"],[121.4587,31.24188,1,"汉中路"],[121.47154,31.24231,1,"曲阜路"],[121.48232,31.24382,1,"天潼路"],[121.49816,31.25016,0,"国际客运中心"],[121.5068,31.25352,0,"提篮桥"],[121.51309,31.25794,1,"大连路"],[121.5237,31.26457,1,"江浦公园"],[121.53235,31.26857,0,"宁国路"],[121.54469,31.27521,0,"隆昌路"],[121.55266,31.27979,0,"爱国路"],[121.56131,31.28078,0,"复兴岛"],[121.57912,31.28253,0,"东陆路"],[121.58836,31.28068,1,"巨峰路"],[121.60296,31.28009,0,"杨高北路"],[121.61548,31.27982,0,"金京路"],[121.62686,31.28023,0,"申江路"],[121.63863,31.26314,1,"金海路"]]},{"name":"13号线","color":"#EB81B9","st":[[121.31931,31.24099,0,"金运路"],[121.33516,31.24115,0,"金沙江西路"],[121.35514,31.24255,0,"丰庄"],[121.36728,31.23763,0,"祁连山南路"],[121.38195,31.23223,0,"真北路"],[121.39443,31.23175,1,"大渡河路"],[121.4132,31.23215,1,"金沙江路"],[121.42358,31.23051,1,"隆德路"],[121.4305,31.23435,1,"武宁路"],[121.43827,31.24086,1,"长寿路"],[121.44483,31.24428,0,"江宁路"],[121.4587,31.24188,1,"汉中路"],[121.46237,31.23645,0,"自然博物馆"],[121.45997,31.22985,1,"南京西路"],[121.46436,31.22006,0,"淮海中路"],[121.47518,31.21637,1,"一大会址·新天地"],[121.47726,31.20952,1,"马当路"],[121.48159,31.19757,0,"世博会博物馆"],[121.48431,31.18279,0,"世博大道"],[121.48777,31.17445,1,"长清路"],[121.49622,31.17074,1,"成山路"],[121.51087,31.17265,1,"东明路"],[121.52657,31.17628,0,"华鹏路"],[121.54019,31.17929,0,"下南路"],[121.55202,31.18013,0,"北蔡"],[121.55819,31.17509,0,"陈春路"],[121.56641,31.16911,1,"莲溪路"],[121.58311,31.17576,1,"华夏中路"],[121.60246,31.17886,0,"中科路"],[121.61436,31.18348,0,"学林路"],[121.62918,31.18913,0,"张江路"]]},{"name":"14号线","color":"#818530","st":[[121.29701,31.26749,0,"封浜"],[121.3141,31.26536,0,"乐秀路"],[121.33086,31.26306,0,"临洮路"],[121.3457,31.25919,0,"嘉怡路"],[121.3624,31.25639,0,"定边路"],[121.37195,31.25557,0,"真新新村"],[121.38416,31.25328,0,"真光路"],[121.39704,31.25073,1,"铜川路"],[121.40722,31.25077,1,"真如"],[121.41454,31.24506,0,"中宁路"],[121.4177,31.2393,1,"曹杨路"],[121.4305,31.23435,1,"武宁路"],[121.43616,31.2273,0,"武定路"],[121.44653,31.22323,1,"静安寺"],[121.4729,31.2239,1,"一大会址·黄陂南路"],[121.47918,31.22739,1,"大世界"],[121.48743,31.228,1,"豫园"],[121.50213,31.23826,1,"陆家嘴"],[121.51241,31.23853,0,"浦东南路"],[121.5193,31.24031,1,"浦东大道"],[121.53102,31.24132,0,"源深路"],[121.5401,31.24394,1,"昌邑路"],[121.55151,31.25073,0,"歇浦路"],[121.57115,31.25097,1,"云山路"],[121.578,31.24103,1,"蓝天路"],[121.59101,31.234,0,"黄杨路"],[121.60034,31.23706,0,"云顺路"],[121.61543,31.24164,0,"浦东足球场"],[121.62902,31.24209,0,"金粤路"],[121.63509,31.24942,0,"桂桥路"]]},{"name":"15号线","color":"#DAC17D","st":[[121.37301,31.34459,1,"顾村公园"],[121.38177,31.32018,0,"锦秋路"],[121.38087,31.30822,0,"丰翔路"],[121.38035,31.29926,0,"南大路"],[121.38481,31.29156,0,"祁安路"],[121.39222,31.28451,0,"古浪路"],[121.39209,31.27565,0,"武威东路"],[121.40093,31.26269,1,"上海西站"],[121.39704,31.25073,1,"铜川路"],[121.397,31.2433,0,"梅岭北路"],[121.39443,31.23175,1,"大渡河路"],[121.39632,31.22525,0,"长风公园"],[121.40406,31.21116,1,"娄山关路"],[121.39837,31.19886,0,"红宝石路"],[121.40641,31.19155,0,"姚虹路"],[121.4139,31.18435,0,"吴中路"],[121.41806,31.17479,1,"桂林路"],[121.41965,31.16699,1,"桂林公园"],[121.43004,31.15458,1,"上海南站"],[121.42899,31.14426,0,"华东理工大学"],[121.43581,31.13155,0,"罗秀路"],[121.4378,31.12436,0,"朱梅路"],[121.44431,31.10982,1,"景洪路"],[121.43306,31.10384,0,"虹梅南路"],[121.41876,31.09973,0,"景西路"],[121.4179,31.09062,0,"曙建路"],[121.42175,31.08321,0,"双柏路"],[121.4319,31.06282,0,"元江路"],[121.4432,31.03915,0,"永德路"],[121.45122,31.02319,0,"紫竹高新区"]]},{"name":"16号线","color":"#98D1C0","st":[[121.55763,31.20358,1,"龙阳路"],[121.58311,31.17576,1,"华夏中路"],[121.59315,31.15326,1,"罗山路"],[121.60689,31.11004,0,"周浦东"],[121.61124,31.0778,0,"鹤沙航城"],[121.61749,31.05492,0,"航头东"],[121.64898,31.04556,1,"新场"],[121.69922,31.05033,0,"野生动物园"],[121.76168,31.05383,1,"惠南"],[121.7938,31.02645,0,"惠南东"],[121.85052,30.95926,0,"书院"],[121.91085,30.92352,1,"临港大道"],[121.92958,30.90724,1,"滴水湖"]]},{"name":"17号线","color":"#B85A4E","st":[[121.31895,31.19402,1,"虹桥火车站"],[121.29304,31.19168,0,"国家会展中心(17号线)"],[121.27864,31.18633,0,"蟠龙路"],[121.25398,31.1781,0,"徐盈路"],[121.24167,31.17552,0,"徐泾北城"],[121.22392,31.1641,0,"嘉松中路"],[121.19228,31.16125,0,"赵巷"],[121.15166,31.16122,0,"汇金路"],[121.12567,31.15892,0,"青浦新城"],[121.09689,31.16047,0,"漕盈路"],[121.08213,31.13446,0,"淀山湖大道"],[121.04899,31.10059,0,"朱家角"],[121.01953,31.09854,0,"东方绿舟"],[120.96416,31.07053,0,"西岑"]]},{"name":"18号线","color":"#D0970A","st":[[121.41933,31.33532,0,"康文路"],[121.43771,31.3397,0,"呼兰路"],[121.44933,31.34415,0,"爱辉路"],[121.47526,31.34577,0,"长江西路"],[121.47964,31.33768,0,"通南路"],[121.49148,31.33206,1,"长江南路"],[121.49556,31.32171,0,"殷高路"],[121.49633,31.30767,0,"上海财经大学"],[121.49953,31.29635,0,"复旦大学"],[121.51002,31.28928,1,"国权路"],[121.51579,31.28366,0,"抚顺路"],[121.51838,31.27495,1,"江浦路"],[121.5237,31.26457,1,"江浦公园"],[121.5267,31.25904,0,"平凉路"],[121.53116,31.25381,0,"丹阳路"],[121.5401,31.24394,1,"昌邑路"],[121.54353,31.23585,1,"民生路"],[121.54866,31.22751,1,"杨高中路"],[121.551,31.221,0,"迎春路"],[121.55763,31.20358,1,"龙阳路"],[121.55923,31.19116,0,"芳芯路"],[121.56136,31.18276,0,"北中路"],[121.56641,31.16911,1,"莲溪路"],[121.57091,31.15813,1,"御桥"],[121.56731,31.13424,0,"康桥"],[121.56761,31.11413,0,"周浦"],[121.57055,31.10255,0,"繁荣路"],[121.58059,31.09111,0,"沈梅路"],[121.58596,31.07186,0,"鹤涛路"],[121.58899,31.0544,0,"下沙"],[121.59608,31.0373,0,"航头"]]},{"name":"市域机场线","color":"#99ADAC","st":[[121.32444,31.19405,1,"虹桥2号航站楼"],[121.3346,31.14977,1,"中春路"],[121.44431,31.10982,1,"景洪路"],[121.48685,31.12604,0,"三林南"],[121.61489,31.14681,0,"康桥东"],[121.67973,31.15618,0,"上海国际旅游度假区"],[121.80559,31.15096,1,"浦东1号2号航站楼"]]},{"name":"浦江线","color":"#B5B5B6","st":[[121.51227,31.06143,1,"沈杜公路"],[121.52739,31.05611,0,"三鲁公路"],[121.53032,31.04796,0,"闵瑞路"],[121.53059,31.04099,0,"浦航路"],[121.53209,31.03039,0,"东城一路"],[121.52456,31.02525,0,"汇臻路"]]},{"name":"磁浮线","color":"#008187","st":[[121.80559,31.15096,1,"浦东1号2号航站楼"],[121.55763,31.20358,1,"龙阳路"]]}];
+
+// —— 坐标：经纬度 → 本地公里坐标（x 向东，y 向北，z 向上）——
+const LON0 = 121.45, LAT0 = 31.22;
+const KX = 111.32 * Math.cos(LAT0 * Math.PI / 180), KY = 110.9;
+const toKm = (lon, lat) => [(lon - LON0) * KX, (lat - LAT0) * KY];
+
+// 黄浦江（示意走向：闵行 → 陆家嘴湾 → 吴淞口）
+const RIVER = [[121.435,31.02],[121.47,31.055],[121.48,31.09],[121.463,31.115],
+  [121.455,31.145],[121.472,31.163],[121.487,31.178],[121.492,31.196],
+  [121.502,31.205],[121.497,31.222],[121.487,31.235],[121.498,31.247],
+  [121.52,31.255],[121.545,31.263],[121.556,31.283],[121.548,31.305],
+  [121.552,31.33],[121.535,31.355],[121.52,31.375],[121.508,31.392]]
+  .map(p => toKm(p[0], p[1]));
+
+// —— 线路预处理 ——
+const lines = DATA.map((L, li) => {
+  const ring = L.name === "4号线";
+  const raw = L.st.map(s => toKm(s[0], s[1]));
+  // 4号线与3号线共线段错开一点，避免完全重叠
+  const off = ring ? 0.14 : 0;
+  const pts = raw.map(p => [p[0] + off, p[1] - off * 0.4]);
+  if (ring) pts.push(pts[0]);
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) {
+    const dx = pts[i][0] - pts[i-1][0], dy = pts[i][1] - pts[i-1][1];
+    cum.push(cum[i-1] + Math.hypot(dx, dy));
+  }
+  const num = L.name.endsWith("号线") ? L.name.replace("号线", "") : L.name[0];
+  return { name: L.name, num, color: L.color,
+    st: L.st, pts, cum, len: cum[cum.length - 1], ring };
+});
+
+// 站名 → 途经线路（用于换乘判定与悬停提示）
+const stMap = new Map();
+lines.forEach(L => L.st.forEach(s => {
+  const key = s[3];
+  if (!stMap.has(key)) {
+    const p = toKm(s[0], s[1]);
+    stMap.set(key, { name: key, x: p[0], y: p[1], lines: [], color: L.color });
+  }
+  const e = stMap.get(key);
+  if (!e.lines.includes(L.name)) e.lines.push(L.name);
+}));
+const stations = [...stMap.values()];
+stations.forEach(s => s.hub = s.lines.length > 1);
+
+const LABELS = ["人民广场","世纪大道","陆家嘴","徐家汇","静安寺","中山公园",
+  "上海火车站","虹桥火车站","龙阳路","东方体育中心","莘庄","迪士尼"]
+  .map(n => stMap.get(n)).filter(Boolean);
+
+const totalKm = Math.round(lines.reduce((a, l) => a + l.len, 0));
+const nSt = stations.length;
+document.getElementById("stats").textContent =
+  `${lines.length} 条线路（18 条地铁 + 浦江线 + 磁浮 + 机场联络线） · ${nSt} 座车站 · 里程约 ${totalKm} km · 数据来源 高德地图`;
+
+// —— 列车 ——
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const trains = [];
+lines.forEach((L, li) => {
+  const n = Math.max(3, Math.round(L.len / 7));
+  for (let i = 0; i < n; i++) {
+    trains.push({ li, phase: (L.ring ? L.len : 2 * L.len) * i / n });
+  }
+});
+function pointAt(L, s) {
+  s = Math.max(0, Math.min(L.len, s));
+  let lo = 0, hi = L.cum.length - 1;
+  while (lo + 1 < hi) { const m = (lo + hi) >> 1; (L.cum[m] <= s) ? lo = m : hi = m; }
+  const t = (s - L.cum[lo]) / (L.cum[hi] - L.cum[lo] || 1);
+  const a = L.pts[lo], b = L.pts[hi];
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+}
+
+// —— 相机 ——
+const cam = { yaw: -0.5, pitch: 0.92, dist: 84, tx: 2, ty: -6 };
+let autoRotate = false;
+let selected = -1;
+
+const canvas = document.getElementById("scene");
+const ctx = canvas.getContext("2d");
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(devicePixelRatio || 1, 2);
+  W = innerWidth; H = innerHeight;
+  canvas.width = W * DPR; canvas.height = H * DPR;
+}
+addEventListener("resize", resize); resize();
+
+let PR = { cy: 1, sy: 0, cp: 1, sp: 0, F: 900 };
+function updateProj() {
+  PR.cy = Math.cos(cam.yaw); PR.sy = Math.sin(cam.yaw);
+  PR.cp = Math.cos(cam.pitch); PR.sp = Math.sin(cam.pitch);
+  PR.F = Math.min(W, H) * 1.5;
+}
+// 世界(km) → 屏幕(px)。返回 [x, y, 透视缩放]
+function proj(x, y, z) {
+  const px = x - cam.tx, py = y - cam.ty;
+  const rx = px * PR.cy - py * PR.sy;
+  const ry = px * PR.sy + py * PR.cy;
+  const vY = ry * PR.sp + z * PR.cp;
+  const vZ = Math.max(2, ry * PR.cp - z * PR.sp + cam.dist);
+  const s = PR.F / vZ;
+  return [W / 2 + rx * s, H / 2 - vY * s, s];
+}
+
+// —— 交互 ——
+const pointers = new Map();
+let lastPinch = 0, hoverPt = null, downAt = null;
+canvas.addEventListener("pointerdown", e => {
+  canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, shift: e.shiftKey });
+  downAt = pointers.size === 1 ? { x: e.clientX, y: e.clientY } : null;
+  canvas.classList.add("dragging");
+  document.getElementById("legend").classList.add("faded");
+});
+canvas.addEventListener("pointermove", e => {
+  if (!pointers.has(e.pointerId)) { hoverPt = { x: e.clientX, y: e.clientY }; return; }
+  const p = pointers.get(e.pointerId);
+  const dx = e.clientX - p.x, dy = e.clientY - p.y;
+  p.x = e.clientX; p.y = e.clientY;
+  if (pointers.size === 1) {
+    if (Math.abs(dx) + Math.abs(dy) > 0) camGoal = null;
+    if (e.shiftKey || p.shift) { // 平移
+      const k = cam.dist / PR.F;
+      const mx = dx * k, my = -dy * k / Math.max(0.25, PR.sp);
+      cam.tx -= mx * PR.cy + my * PR.sy;
+      cam.ty -= -mx * PR.sy + my * PR.cy;
+    } else {
+      cam.yaw += dx * 0.005;
+      cam.pitch = Math.max(0.28, Math.min(1.45, cam.pitch + dy * 0.004));
+    }
+  } else if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y);
+    if (lastPinch) cam.dist = Math.max(18, Math.min(180, cam.dist * lastPinch / d));
+    lastPinch = d;
+  }
+  hoverPt = null; hideTip();
+});
+function endPointer(e) {
+  pointers.delete(e.pointerId); lastPinch = 0;
+  if (!pointers.size) {
+    canvas.classList.remove("dragging");
+    document.getElementById("legend").classList.remove("faded");
+  }
+}
+canvas.addEventListener("pointerup", e => { pickStation(e); endPointer(e); });
+canvas.addEventListener("pointercancel", e => { downAt = null; endPointer(e); });
+canvas.addEventListener("pointerleave", () => { hoverPt = null; hideTip(); });
+canvas.addEventListener("wheel", e => {
+  e.preventDefault();
+  camGoal = null;
+  cam.dist = Math.max(18, Math.min(180, cam.dist * Math.exp(e.deltaY * 0.0012)));
+}, { passive: false });
+
+// 点击（非拖拽）选起终点
+function pickStation(e) {
+  if (!downAt) return;
+  const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y);
+  downAt = null;
+  if (moved > 6) return;
+  let best = null, bd = 196; // 14px 命中半径
+  stations.forEach(s => {
+    const m = proj(s.x, s.y, 0);
+    const d = (m[0] - e.clientX) ** 2 + (m[1] - e.clientY) ** 2;
+    if (d < bd) { bd = d; best = s; }
+  });
+  if (!best) return;
+  if (!selA || selB) { // 空白或已有完整路径 → 重新选起点
+    clearRoute();
+    selA = best.name; inA.value = best.name;
+  } else if (best.name !== selA) {
+    selB = best.name; inB.value = best.name;
+    computeRoute();
+  }
+}
+
+// —— HUD ——
+const rotBtn = document.getElementById("rotBtn");
+rotBtn.addEventListener("click", () => {
+  autoRotate = !autoRotate;
+  rotBtn.setAttribute("aria-pressed", String(autoRotate));
+  rotBtn.textContent = autoRotate ? "环绕 开" : "环绕 关";
+});
+const speedInput = document.getElementById("speed");
+if (reduceMotion) speedInput.value = "0";
+
+const legend = document.getElementById("legend");
+const darkText = c => { // 亮底徽章用深色数字
+  const n = parseInt(c.slice(1), 16);
+  const lum = 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255);
+  return lum > 150;
+};
+const selName = document.getElementById("selName");
+lines.forEach((L, i) => {
+  const b = document.createElement("button");
+  b.className = "chip"; b.setAttribute("aria-pressed", "false");
+  b.title = L.name + (L.ring ? "（环线）" : "");
+  b.setAttribute("aria-label", L.name);
+  b.innerHTML = `<span class="badge" style="background:${L.color};color:${darkText(L.color) ? "#101820" : "#fff"}">${L.num}</span>`;
+  b.addEventListener("click", () => {
+    if (route) clearRoute();
+    selected = (selected === i) ? -1 : i;
+    selName.textContent = selected === -1 ? "全网" : L.name;
+    [...legend.querySelectorAll(".chip")].forEach((c, j) => {
+      c.setAttribute("aria-pressed", String(j === selected));
+      c.classList.toggle("dimmed", selected !== -1 && j !== selected);
+    });
+  });
+  legend.appendChild(b);
+});
+
+// —— 换乘路径查询 ——
+const TRANSFER_KM = 4; // 换乘代价折合公里：调大更倾向少换乘
+const lineIdx = new Map(lines.map((L, i) => [L.name, i]));
+const nid = (name, li) => li + "|" + name; // 节点 = 车站 × 线路
+const adj = new Map();
+function addEdge(a, b, w, li, seg) {
+  if (!adj.has(a)) adj.set(a, []);
+  adj.get(a).push({ to: b, w, li, seg });
+}
+lines.forEach((L, li) => {
+  const n = L.st.length;
+  for (let i = 0; i + 1 < n; i++) {
+    const w = L.cum[i + 1] - L.cum[i];
+    addEdge(nid(L.st[i][3], li), nid(L.st[i + 1][3], li), w, li, [i, i + 1]);
+    addEdge(nid(L.st[i + 1][3], li), nid(L.st[i][3], li), w, li, [i + 1, i]);
+  }
+  if (L.ring) { // 环线闭合段（pts[n] 即 pts[0]）
+    const w = L.cum[n] - L.cum[n - 1];
+    addEdge(nid(L.st[n - 1][3], li), nid(L.st[0][3], li), w, li, [n - 1, n]);
+    addEdge(nid(L.st[0][3], li), nid(L.st[n - 1][3], li), w, li, [n, n - 1]);
+  }
+});
+stations.forEach(s => {
+  if (!s.hub) return;
+  for (const a of s.lines) for (const b of s.lines) {
+    if (a !== b) addEdge(nid(s.name, lineIdx.get(a)), nid(s.name, lineIdx.get(b)),
+      TRANSFER_KM, -1, null);
+  }
+});
+
+function dijkstra(aName, bName) {
+  const dist = new Map(), prevE = new Map(), done = new Set();
+  stMap.get(aName).lines.forEach(ln => dist.set(nid(aName, lineIdx.get(ln)), 0));
+  for (;;) {
+    let u = null, du = Infinity;
+    dist.forEach((d, k) => { if (d < du && !done.has(k)) { du = d; u = k; } });
+    if (u === null) break;
+    done.add(u);
+    for (const e of adj.get(u) || []) {
+      if (du + e.w < (dist.has(e.to) ? dist.get(e.to) : Infinity)) {
+        dist.set(e.to, du + e.w);
+        prevE.set(e.to, { from: u, e });
+      }
+    }
+  }
+  let end = null, best = Infinity;
+  stMap.get(bName).lines.forEach(ln => {
+    const d = dist.get(nid(bName, lineIdx.get(ln)));
+    if (d !== undefined && d < best) { best = d; end = nid(bName, lineIdx.get(ln)); }
+  });
+  if (end === null) return null;
+  const edges = [];
+  for (let cur = end; prevE.has(cur); cur = prevE.get(cur).from)
+    edges.unshift(prevE.get(cur).e);
+  return edges;
+}
+
+let route = null, selA = "", selB = "", camGoal = null;
+const stName = (li, i) => lines[li].st[i % lines[li].st.length][3];
+
+function computeRoute() {
+  const edges = dijkstra(selA, selB);
+  if (!edges || !edges.length) return;
+  // 边序列 → 乘车段（legs）
+  const legs = [];
+  let km = 0, stops = 0;
+  edges.forEach(e => {
+    if (e.li < 0) return; // 换乘边
+    km += e.w; stops++;
+    const last = legs[legs.length - 1];
+    if (last && last.li === e.li) last.idx.push(e.seg[1]);
+    else legs.push({ li: e.li, idx: [e.seg[0], e.seg[1]] });
+  });
+  // 路径折线（世界坐标）：高亮 + 光点动画共用
+  const pts = [], cum = [0];
+  legs.forEach(g => {
+    g.pts = g.idx.map(i => lines[g.li].pts[i]);
+    g.from = stName(g.li, g.idx[0]);
+    g.to = stName(g.li, g.idx[g.idx.length - 1]);
+    g.pts.forEach(p => pts.push(p));
+  });
+  for (let i = 1; i < pts.length; i++)
+    cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  route = { legs, pts, cum, len: cum[cum.length - 1], km, stops,
+    transfers: legs.slice(1).map(g => g.from) };
+  // 清掉线路筛选，两种模式互斥
+  selected = -1;
+  [...legend.querySelectorAll(".chip")].forEach(c => {
+    c.setAttribute("aria-pressed", "false"); c.classList.remove("dimmed");
+  });
+  selName.textContent = "路径";
+  renderCard();
+  flyTo(pts);
+}
+
+function renderCard() {
+  const card = document.getElementById("routeCard");
+  const mins = Math.round(route.km * 1.9 + route.transfers.length * 6);
+  let h = `<div class="rc-head">${selA} → ${selB}</div>`;
+  route.legs.forEach((g, i) => {
+    const L = lines[g.li];
+    if (i) h += `<div class="rc-tr">↳ ${g.from} 站内换乘</div>`;
+    h += `<div class="rc-leg"><span class="badge" style="background:${L.color};color:${darkText(L.color) ? "#101820" : "#fff"}">${L.num}</span><span>${L.name}&ensp;${g.from} → ${g.to}<span style="color:var(--muted)">（${g.idx.length - 1}站）</span></span></div>`;
+  });
+  h += `<div class="rc-foot">共 ${route.stops} 站 · 换乘 ${route.transfers.length} 次 · 约 ${route.km.toFixed(1)} km · 预计 ${mins} 分钟</div>`;
+  card.innerHTML = h; card.hidden = false;
+}
+
+function clearRoute() {
+  route = null; selA = ""; selB = ""; camGoal = null;
+  inA.value = ""; inB.value = "";
+  document.getElementById("routeCard").hidden = true;
+  if (selected === -1) selName.textContent = "全网";
+}
+
+function flyTo(pts) {
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  pts.forEach(p => {
+    x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]);
+    y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]);
+  });
+  const span = Math.max(x1 - x0, y1 - y0, 4);
+  camGoal = { tx: (x0 + x1) / 2, ty: (y0 + y1) / 2,
+    dist: Math.max(18, Math.min(180, span * 1.5 + 8)) };
+}
+
+const inA = document.getElementById("stA"), inB = document.getElementById("stB");
+const dl = document.getElementById("stList");
+stations.forEach(s => {
+  const o = document.createElement("option");
+  o.value = s.name;
+  dl.appendChild(o);
+});
+function tryRoute() {
+  const a = inA.value.trim(), b = inB.value.trim();
+  if (!stMap.has(a) || !stMap.has(b) || a === b) return;
+  selA = a; selB = b;
+  computeRoute();
+}
+inA.addEventListener("change", tryRoute);
+inB.addEventListener("change", tryRoute);
+document.getElementById("swapBtn").addEventListener("click", () => {
+  [inA.value, inB.value] = [inB.value, inA.value];
+  tryRoute();
+});
+document.getElementById("routeClear").addEventListener("click", clearRoute);
+
+// —— 悬停提示 ——
+const tip = document.getElementById("tip");
+const tipName = tip.querySelector(".tname"), tipLines = tip.querySelector(".tlines");
+function hideTip() { tip.style.display = "none"; }
+function showTip(s, x, y) {
+  tipName.textContent = s.name;
+  tipLines.textContent = s.lines.join(" · ");
+  tip.style.display = "block";
+  tip.style.left = Math.min(W - 220, x + 14) + "px";
+  tip.style.top = Math.max(8, y - 40) + "px";
+}
+
+// —— 渲染 ——
+let t0 = performance.now(), clock = 0;
+function frame(now) {
+  const dt = Math.min(0.05, (now - t0) / 1000); t0 = now;
+  const speed = parseFloat(speedInput.value);
+  clock += dt * speed;
+  if (autoRotate && pointers.size === 0) cam.yaw += dt * 0.07;
+  if (camGoal) { // 相机平滑飞向查询路径
+    const k = Math.min(1, dt * 2.5);
+    cam.tx += (camGoal.tx - cam.tx) * k;
+    cam.ty += (camGoal.ty - cam.ty) * k;
+    cam.dist += (camGoal.dist - cam.dist) * k;
+    if (Math.abs(camGoal.dist - cam.dist) < 0.2 &&
+        Math.hypot(camGoal.tx - cam.tx, camGoal.ty - cam.ty) < 0.2) camGoal = null;
+  }
+  updateProj();
+
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  // 地面网格
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(90,130,190,0.08)";
+  ctx.beginPath();
+  for (let gx = -50; gx <= 50; gx += 5) {
+    let m = proj(gx, -42, 0); ctx.moveTo(m[0], m[1]);
+    m = proj(gx, 32, 0); ctx.lineTo(m[0], m[1]);
+  }
+  for (let gy = -42; gy <= 32; gy += 5) {
+    let m = proj(-50, gy, 0); ctx.moveTo(m[0], m[1]);
+    m = proj(50, gy, 0); ctx.lineTo(m[0], m[1]);
+  }
+  ctx.stroke();
+
+  // 黄浦江
+  ctx.lineJoin = "round"; ctx.lineCap = "round";
+  ctx.beginPath();
+  RIVER.forEach((p, i) => {
+    const m = proj(p[0], p[1], 0);
+    i ? ctx.lineTo(m[0], m[1]) : ctx.moveTo(m[0], m[1]);
+  });
+  ctx.strokeStyle = "rgba(28,66,108,0.4)";
+  ctx.lineWidth = Math.max(6, 1.1 * PR.F / cam.dist);
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(60,120,180,0.18)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // 线路（两遍：辉光 + 芯线）
+  const alphaOf = i => route ? 0.07 : (selected === -1 || selected === i) ? 1 : 0.10;
+  lines.forEach((L, i) => {
+    ctx.beginPath();
+    L.pts.forEach((p, j) => {
+      const m = proj(p[0], p[1], 0);
+      j ? ctx.lineTo(m[0], m[1]) : ctx.moveTo(m[0], m[1]);
+    });
+    const a = alphaOf(i);
+    ctx.globalAlpha = 0.16 * a;
+    ctx.strokeStyle = L.color; ctx.lineWidth = 6.5;
+    ctx.stroke();
+    ctx.globalAlpha = (selected === i ? 1 : 0.85) * a;
+    ctx.lineWidth = selected === i ? 2.6 : 1.9;
+    ctx.stroke();
+  });
+  ctx.globalAlpha = 1;
+
+  // 车站
+  const picks = [];
+  lines.forEach((L, i) => {
+    const a = alphaOf(i);
+    if (a < 0.5) return;
+    ctx.fillStyle = L.color;
+    ctx.globalAlpha = 0.75 * a;
+    L.st.forEach(s => {
+      if (stMap.get(s[3]).hub) return;
+      const p = toKm(s[0], s[1]);
+      const m = proj(p[0], p[1], 0);
+      ctx.beginPath(); ctx.arc(m[0], m[1], Math.max(1.3, m[2] * 0.09), 0, 7); ctx.fill();
+    });
+  });
+  ctx.globalAlpha = 1;
+  stations.forEach(s => {
+    const vis = route ? false : (selected === -1 || s.lines.includes(lines[selected].name));
+    const m = proj(s.x, s.y, 0);
+    if (s.hub && vis) {
+      const r = Math.max(2.1, m[2] * 0.12);
+      ctx.beginPath(); ctx.arc(m[0], m[1], r, 0, 7);
+      ctx.fillStyle = "#eef3fa"; ctx.fill();
+      ctx.beginPath(); ctx.arc(m[0], m[1], r + 1.6, 0, 7);
+      ctx.strokeStyle = "rgba(238,243,250,0.35)"; ctx.lineWidth = 1; ctx.stroke();
+    }
+    if (vis) picks.push({ s, x: m[0], y: m[1] });
+  });
+
+  // 列车光点（加法混合）
+  ctx.globalCompositeOperation = "lighter";
+  trains.forEach(tr => {
+    const L = lines[tr.li];
+    const a = alphaOf(tr.li);
+    if (a < 0.5) return;
+    let s, dir;
+    if (L.ring) {
+      s = (clock * 2.3 + tr.phase) % L.len; dir = 1;
+    } else {
+      const u = (clock * 2.3 + tr.phase) % (2 * L.len);
+      dir = u < L.len ? 1 : -1;
+      s = u < L.len ? u : 2 * L.len - u;
+    }
+    // 彗尾
+    for (let k = 7; k >= 1; k--) {
+      const q = pointAt(L, s - dir * k * 0.45);
+      const m = proj(q[0], q[1], 0.06);
+      ctx.globalAlpha = 0.10 * (1 - k / 8) * a;
+      ctx.fillStyle = L.color;
+      ctx.beginPath(); ctx.arc(m[0], m[1], 2.6 * (1 - k / 10), 0, 7); ctx.fill();
+    }
+    const h = pointAt(L, s);
+    const m = proj(h[0], h[1], 0.06);
+    ctx.globalAlpha = 0.55 * a;
+    ctx.fillStyle = L.color;
+    ctx.beginPath(); ctx.arc(m[0], m[1], 3.6, 0, 7); ctx.fill();
+    ctx.globalAlpha = 0.95 * a;
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath(); ctx.arc(m[0], m[1], 1.4, 0, 7); ctx.fill();
+  });
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = 1;
+
+  // 查询路径高亮
+  if (route) {
+    ctx.lineJoin = "round"; ctx.lineCap = "round";
+    route.legs.forEach(g => {
+      const L = lines[g.li];
+      ctx.beginPath();
+      g.pts.forEach((p, j) => {
+        const m = proj(p[0], p[1], 0);
+        j ? ctx.lineTo(m[0], m[1]) : ctx.moveTo(m[0], m[1]);
+      });
+      ctx.globalAlpha = 0.35; ctx.strokeStyle = L.color; ctx.lineWidth = 8; ctx.stroke();
+      ctx.globalAlpha = 1; ctx.lineWidth = 3; ctx.stroke();
+    });
+    // 沿途车站
+    route.legs.forEach(g => {
+      g.pts.forEach((p, j) => {
+        const m = proj(p[0], p[1], 0);
+        ctx.beginPath(); ctx.arc(m[0], m[1], Math.max(1.6, m[2] * 0.1), 0, 7);
+        ctx.fillStyle = "#eef3fa"; ctx.fill();
+        picks.push({ s: stMap.get(stName(g.li, g.idx[j])), x: m[0], y: m[1] });
+      });
+    });
+    // 换乘站脉冲光环
+    route.legs.slice(1).forEach(g => {
+      const p = g.pts[0], m = proj(p[0], p[1], 0);
+      const r = Math.max(4, m[2] * 0.18) + 2 + Math.sin(now * 0.005) * 2;
+      ctx.beginPath(); ctx.arc(m[0], m[1], r, 0, 7);
+      ctx.strokeStyle = lines[g.li].color; ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.85; ctx.stroke(); ctx.globalAlpha = 1;
+    });
+    // 光点沿路径行进
+    if (route.len > 0) {
+      const sPos = (clock * 2.6) % route.len;
+      ctx.globalCompositeOperation = "lighter";
+      for (let k = 6; k >= 0; k--) {
+        const q = pointAt(route, sPos - k * 0.5);
+        const m = proj(q[0], q[1], 0.08);
+        ctx.globalAlpha = k ? 0.12 * (1 - k / 7) : 0.9;
+        ctx.fillStyle = k ? "#8fd0ff" : "#ffffff";
+        ctx.beginPath(); ctx.arc(m[0], m[1], k ? 3 : 2.2, 0, 7); ctx.fill();
+      }
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = 1;
+    }
+    // 起终点 + 换乘标注
+    ctx.font = "11px Bahnschrift, 'Microsoft YaHei', sans-serif";
+    ctx.textAlign = "center";
+    const placedR = []; // 起终点优先占位，换乘标注冲突则不画字
+    const mark = (name, txt, col, must) => {
+      const st = stMap.get(name);
+      const g0 = proj(st.x, st.y, 0), h0 = proj(st.x, st.y, 2.8);
+      const lx = h0[0], ly = h0[1] - 6;
+      if (!must && placedR.some(p => Math.abs(p[0] - lx) < 96 && Math.abs(p[1] - ly) < 15)) return;
+      placedR.push([lx, ly]);
+      ctx.strokeStyle = "rgba(141,160,188,0.5)"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(g0[0], g0[1]); ctx.lineTo(h0[0], h0[1]); ctx.stroke();
+      ctx.fillStyle = col; ctx.fillText(txt, lx, ly);
+    };
+    mark(selA, "▲ " + selA, "#7fe08f", true);
+    mark(selB, "▼ " + selB, "#ff8f7f", true);
+    route.legs.slice(1).forEach(g =>
+      mark(g.from, `⇋ ${g.from} 换乘${lines[g.li].name}`, "rgba(233,238,246,0.92)", false));
+  }
+
+  // 地名标注（立杆 + 文字）
+  ctx.font = "11px Bahnschrift, 'Microsoft YaHei', sans-serif";
+  ctx.textAlign = "center";
+  const placed = []; // 按优先级避让，重叠只画先者
+  LABELS.forEach(s => {
+    if (route) return; // 路径模式下只显示路径自己的标注
+    if (selected !== -1 && !s.lines.includes(lines[selected].name)) return;
+    const g = proj(s.x, s.y, 0), h = proj(s.x, s.y, 2.4);
+    const lx = h[0], ly = h[1] - 5;
+    if (placed.some(p => Math.abs(p[0] - lx) < 76 && Math.abs(p[1] - ly) < 16)) return;
+    placed.push([lx, ly]);
+    ctx.strokeStyle = "rgba(141,160,188,0.35)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(g[0], g[1]); ctx.lineTo(h[0], h[1]); ctx.stroke();
+    ctx.fillStyle = "rgba(233,238,246,0.88)";
+    ctx.fillText(s.name, lx, ly);
+  });
+
+  // 悬停命中
+  if (hoverPt && pointers.size === 0) {
+    let best = null, bd = 169;
+    for (const p of picks) {
+      const d = (p.x - hoverPt.x) ** 2 + (p.y - hoverPt.y) ** 2;
+      if (d < bd) { bd = d; best = p; }
+    }
+    best ? showTip(best.s, best.x, best.y) : hideTip();
+  }
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
