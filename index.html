@@ -337,13 +337,14 @@ function pickStation(e) {
     if (d < bd) { bd = d; best = s; }
   });
   if (!best) return;
-  if (!selA || selB) { // 空白或已有完整路径 → 重新选起点
+  if (route) { // 已有完整路径 → 这次点击重新开始选起点
     clearRoute();
     selA = best.name; inA.value = best.name;
-  } else if (best.name !== selA) {
-    selB = best.name; inB.value = best.name;
-    computeRoute();
+    return;
   }
+  if (!selA) { selA = best.name; inA.value = best.name; }
+  else if (best.name !== selA) { selB = best.name; inB.value = best.name; }
+  if (selA && selB && selA !== selB) computeRoute();
 }
 
 // —— HUD ——
@@ -383,8 +384,10 @@ lines.forEach((L, i) => {
 
 // —— 换乘路径查询（代价 = 时间/分钟）——
 const TRANSFER_MIN = 7; // 换乘代价（分钟）：调大更倾向少换乘
-// 含停站的全程均速 km/h：磁浮 30km 约 8 分钟；市域机场线两机场官方 40 分钟内
-const AVG_KMH = L => L.name === "磁浮线" ? 220 : L.name === "市域机场线" ? 90 : 35;
+// 时间模型：区间运行速度 + 每停靠一站的停站/进出站耗时
+// 地铁区间约 38 km/h + 每站 1 分钟 ≈ 市区密站段 2.5 分钟/站，与实际接近
+const RUN_KMH = L => L.name === "磁浮线" ? 200 : L.name === "市域机场线" ? 110 : 38;
+const DWELL_MIN = 1.0;
 const lineIdx = new Map(lines.map((L, i) => [L.name, i]));
 const nid = (name, li) => li + "|" + name; // 节点 = 车站 × 线路
 const adj = new Map();
@@ -393,14 +396,14 @@ function addEdge(a, b, w, km, li, seg) {
   adj.get(a).push({ to: b, w, km, li, seg });
 }
 lines.forEach((L, li) => {
-  const n = L.st.length, v = AVG_KMH(L);
+  const n = L.st.length, v = RUN_KMH(L);
   for (let i = 0; i + 1 < n; i++) {
-    const km = L.cum[i + 1] - L.cum[i], w = km / v * 60;
+    const km = L.cum[i + 1] - L.cum[i], w = km / v * 60 + DWELL_MIN;
     addEdge(nid(L.st[i][3], li), nid(L.st[i + 1][3], li), w, km, li, [i, i + 1]);
     addEdge(nid(L.st[i + 1][3], li), nid(L.st[i][3], li), w, km, li, [i + 1, i]);
   }
   if (L.ring) { // 环线闭合段（pts[n] 即 pts[0]）
-    const km = L.cum[n] - L.cum[n - 1], w = km / v * 60;
+    const km = L.cum[n] - L.cum[n - 1], w = km / v * 60 + DWELL_MIN;
     addEdge(nid(L.st[n - 1][3], li), nid(L.st[0][3], li), w, km, li, [n - 1, n]);
     addEdge(nid(L.st[0][3], li), nid(L.st[n - 1][3], li), w, km, li, [n, n - 1]);
   }
@@ -519,8 +522,9 @@ stations.forEach(s => {
 });
 function tryRoute() {
   const a = inA.value.trim(), b = inB.value.trim();
+  if (stMap.has(a)) selA = a; // 单独填了有效起点也先给图上反馈
+  if (stMap.has(b)) selB = b;
   if (!stMap.has(a) || !stMap.has(b) || a === b) return;
-  selA = a; selB = b;
   computeRoute();
 }
 inA.addEventListener("change", tryRoute);
@@ -693,13 +697,17 @@ function frame(now) {
         picks.push({ s: stMap.get(stName(g.li, g.idx[j])), x: m[0], y: m[1] });
       });
     });
-    // 换乘站脉冲光环
+    // 换乘站：常亮圈 + 向外扩散的波纹
     route.legs.slice(1).forEach(g => {
       const p = g.pts[0], m = proj(p[0], p[1], 0);
-      const r = Math.max(4, m[2] * 0.18) + 2 + Math.sin(now * 0.005) * 2;
-      ctx.beginPath(); ctx.arc(m[0], m[1], r, 0, 7);
-      ctx.strokeStyle = lines[g.li].color; ctx.lineWidth = 2;
-      ctx.globalAlpha = 0.85; ctx.stroke(); ctx.globalAlpha = 1;
+      const base = Math.max(7, m[2] * 0.3);
+      const ph = (now * 0.0016) % 1;
+      ctx.strokeStyle = lines[g.li].color;
+      ctx.globalAlpha = 0.95; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(m[0], m[1], base, 0, 7); ctx.stroke();
+      ctx.globalAlpha = 0.7 * (1 - ph); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(m[0], m[1], base + ph * 18, 0, 7); ctx.stroke();
+      ctx.globalAlpha = 1;
     });
     // 光点沿路径行进
     if (route.len > 0) {
@@ -730,17 +738,40 @@ function frame(now) {
     // 换乘文字放光环下方，不与顶部标注抢位
     route.legs.slice(1).forEach(g => {
       const m = proj(g.pts[0][0], g.pts[0][1], 0);
+      const base = Math.max(7, m[2] * 0.3);
       ctx.fillStyle = "rgba(233,238,246,0.92)";
-      ctx.fillText(`⇋ ${g.from} 换乘${lines[g.li].name}`, m[0], m[1] + 24);
+      ctx.fillText(`⇋ ${g.from} 换乘${lines[g.li].name}`, m[0], m[1] + base + 16);
     });
+  } else if (selA && stMap.has(selA)) {
+    // 已选起点、待选终点：绿色波纹反馈
+    const st = stMap.get(selA);
+    const g0 = proj(st.x, st.y, 0), h0 = proj(st.x, st.y, 2.8);
+    const ph = (now * 0.0016) % 1;
+    ctx.strokeStyle = "#7fe08f";
+    ctx.globalAlpha = 0.95; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(g0[0], g0[1], 6, 0, 7); ctx.stroke();
+    ctx.globalAlpha = 0.7 * (1 - ph); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(g0[0], g0[1], 6 + ph * 16, 0, 7); ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = "rgba(141,160,188,0.5)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(g0[0], g0[1]); ctx.lineTo(h0[0], h0[1]); ctx.stroke();
+    ctx.font = "11px Bahnschrift, 'Microsoft YaHei', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#7fe08f";
+    ctx.fillText("▲ " + selA + " · 再点终点站", h0[0], h0[1] - 6);
   }
 
   // 地名标注（立杆 + 文字）
   ctx.font = "11px Bahnschrift, 'Microsoft YaHei', sans-serif";
   ctx.textAlign = "center";
   const placed = []; // 按优先级避让，重叠只画先者
+  if (!route && selA && stMap.has(selA)) { // 起点绿色标注先占位，地名让开
+    const h = proj(stMap.get(selA).x, stMap.get(selA).y, 2.8);
+    placed.push([h[0] - 60, h[1] - 11], [h[0] + 60, h[1] - 11]);
+  }
   LABELS.forEach(s => {
     if (route) return; // 路径模式下只显示路径自己的标注
+    if (s.name === selA) return; // 已被选为起点，绿色标注接管
     if (selected !== -1 && !s.lines.includes(lines[selected].name)) return;
     const g = proj(s.x, s.y, 0), h = proj(s.x, s.y, 2.4);
     const lx = h[0], ly = h[1] - 5;
