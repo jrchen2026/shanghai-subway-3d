@@ -45,21 +45,9 @@
     font-variant-numeric: tabular-nums; letter-spacing: 0.06em;
   }
 
-  #controls { top: 20px; right: 22px; display: flex; flex-direction: column;
-    gap: 10px; align-items: flex-end; }
-  #controls .row { display: flex; gap: 8px; align-items: center; padding: 8px 12px; }
-  button.tgl {
-    font: inherit; font-size: 12px; letter-spacing: 0.08em; color: var(--muted);
-    background: var(--panel); border: 1px solid var(--panel-line); border-radius: 10px;
-    padding: 8px 14px; cursor: pointer; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-  }
-  button.tgl:hover { color: var(--ink); border-color: rgba(140, 170, 210, 0.35); }
-  button.tgl[aria-pressed="true"] { color: var(--ink); border-color: rgba(233, 238, 246, 0.5); }
-  button.tgl:focus-visible, .chip:focus-visible {
+  .chip:focus-visible {
     outline: 2px solid #e9eef6; outline-offset: 2px;
   }
-  #speedRow label { font-size: 11px; letter-spacing: 0.14em; color: var(--muted); }
-  #speed { width: 110px; accent-color: #8da0bc; }
 
   #legend {
     bottom: 14px; left: 50%; transform: translateX(-50%);
@@ -101,9 +89,9 @@
 
   #routeBox { top: 20px; left: 50%; transform: translateX(-50%);
     display: flex; gap: 6px; align-items: center; padding: 7px 9px; }
-  #routeBox input { font: inherit; font-size: 12px; color: var(--ink);
+  #routeBox input { font: inherit; font-size: 13px; color: var(--ink);
     background: rgba(233,238,246,0.05); border: 1px solid var(--panel-line);
-    border-radius: 7px; padding: 6px 9px; width: 104px; }
+    border-radius: 7px; padding: 6px 9px; width: 112px; }
   #routeBox input::placeholder { color: var(--faint); }
   #routeBox input:focus { outline: none; border-color: rgba(233,238,246,0.5); }
   .rbtn { font: inherit; font-size: 13px; color: var(--muted); background: none;
@@ -121,28 +109,38 @@
   #routeCard .rc-foot { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--panel-line);
     color: var(--muted); font-variant-numeric: tabular-nums; }
 
+  /* 站名候选面板 */
+  #sugg { position: fixed; z-index: 4; padding: 4px; max-height: 42vh; overflow-y: auto; }
+  .sg { display: flex; width: 100%; box-sizing: border-box; gap: 5px; align-items: center;
+    padding: 8px 9px; border-radius: 7px; cursor: pointer; font: inherit; font-size: 13px;
+    color: var(--ink); background: none; border: none; text-align: left; }
+  .sg:hover, .sg:focus-visible { background: rgba(233,238,246,0.09); outline: none; }
+  .sg .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    margin-right: 5px; }
+  .sg .b { flex: none; width: 15px; height: 15px; border-radius: 4px; font-size: 10px;
+    font-weight: 700; display: inline-grid; place-items: center; }
+
   @media (max-width: 960px) {
-    #routeBox { top: auto; bottom: 58px; }
+    /* 平板：查询框靠右上，避免与标题重叠；16px 防 iOS 聚焦缩放 */
+    #routeBox { left: auto; right: 14px; transform: none; }
+    #routeBox input { font-size: 16px; }
   }
   @media (max-width: 640px) {
-    #title { left: 14px; top: 14px; max-width: 72vw; }
-    #title .sub { display: none; }
-    #stats { font-size: 11px; }
-    #controls { right: 14px; top: 14px; gap: 6px; }
-    button.tgl { font-size: 11px; padding: 6px 10px; }
-    #controls .row { padding: 6px 10px; }
-    #speed { width: 68px; }
+    /* 查询优先：标题缩成一行，查询框通栏置顶 */
+    #title { left: 12px; top: 10px; max-width: none; }
+    #title .eyebrow, #title .sub, #stats { display: none; }
+    #title h1 { font-size: 15px; letter-spacing: 0.1em; }
+    #routeBox { top: 38px; left: 10px; right: 10px; }
+    #routeBox input { flex: 1; width: auto; min-width: 0; }
     #hint { display: none; }
+    /* 结果卡片：查询框下方通栏 */
+    #routeCard { top: 94px; left: 10px; right: 10px; width: auto; max-height: 38vh; }
     /* 徽章栏：单行横向滑动，不再换行占屏 */
     #legend { bottom: 10px; left: 10px; right: 10px; transform: none;
       max-width: none; flex-wrap: nowrap; justify-content: flex-start;
       overflow-x: auto; scrollbar-width: none; }
     #legend::-webkit-scrollbar { display: none; }
     .chip, #selName { flex: none; }
-    /* 查询框：通栏置于徽章栏上方 */
-    #routeBox { bottom: 56px; left: 10px; right: 10px; transform: none; }
-    #routeBox input { flex: 1; width: auto; min-width: 0; }
-    #routeCard { display: none; }
   }
 </style>
 </head>
@@ -156,21 +154,13 @@
   <div id="stats"></div>
 </div>
 
-<div class="hud" id="controls">
-  <button class="tgl" id="rotBtn" aria-pressed="false">环绕 关</button>
-  <div class="row panel" id="speedRow">
-    <label for="speed">车速</label>
-    <input type="range" id="speed" min="0" max="3" step="0.1" value="1">
-  </div>
-</div>
-
 <div class="hud panel" id="routeBox" role="search" aria-label="换乘查询">
-  <input id="stA" list="stList" placeholder="出发站" autocomplete="off" aria-label="出发站">
+  <input id="stA" placeholder="出发站" autocomplete="off" aria-label="出发站">
   <button class="rbtn" id="swapBtn" title="交换起终点" aria-label="交换起终点">⇄</button>
-  <input id="stB" list="stList" placeholder="到达站" autocomplete="off" aria-label="到达站">
+  <input id="stB" placeholder="到达站" autocomplete="off" aria-label="到达站">
   <button class="rbtn" id="routeClear" title="清除路径" aria-label="清除路径">✕</button>
 </div>
-<datalist id="stList"></datalist>
+<div class="panel" id="sugg" role="listbox" aria-label="站名候选" hidden></div>
 <div class="hud panel" id="routeCard" hidden></div>
 
 <div class="hud panel" id="legend" role="group" aria-label="线路筛选"><span id="selName">全网</span></div>
@@ -257,7 +247,6 @@ function pointAt(L, s) {
 
 // —— 相机 ——
 const cam = { yaw: -0.5, pitch: 0.92, dist: 84, tx: 2, ty: -6 };
-let autoRotate = false;
 let selected = -1;
 
 const canvas = document.getElementById("scene");
@@ -361,14 +350,8 @@ function pickStation(e) {
 }
 
 // —— HUD ——
-const rotBtn = document.getElementById("rotBtn");
-rotBtn.addEventListener("click", () => {
-  autoRotate = !autoRotate;
-  rotBtn.setAttribute("aria-pressed", String(autoRotate));
-  rotBtn.textContent = autoRotate ? "环绕 开" : "环绕 关";
-});
-const speedInput = document.getElementById("speed");
-if (reduceMotion) speedInput.value = "0";
+// 列车光点固定低速，仅作背景氛围
+const TRAIN_SPEED = reduceMotion ? 0 : 0.8;
 
 const legend = document.getElementById("legend");
 const darkText = c => { // 亮底徽章用深色数字
@@ -527,12 +510,55 @@ function flyTo(pts) {
 }
 
 const inA = document.getElementById("stA"), inB = document.getElementById("stB");
-const dl = document.getElementById("stList");
-stations.forEach(s => {
-  const o = document.createElement("option");
-  o.value = s.name;
-  dl.appendChild(o);
+
+// —— 站名候选面板（替代 datalist：iOS 上 datalist 不过滤且触发页面缩放）——
+const sugg = document.getElementById("sugg");
+let sgInput = null;
+const sgBadge = ln => {
+  const L = lines[lineIdx.get(ln)];
+  return `<span class="b" style="background:${L.color};color:${darkText(L.color) ? "#101820" : "#fff"}">${L.num}</span>`;
+};
+function renderSugg() {
+  const q = sgInput.value.trim();
+  const list = (q ? stations.filter(s => s.name.includes(q)) : LABELS).slice(0, 8);
+  if (!list.length) { hideSugg(); return; }
+  sugg.innerHTML = list.map(s =>
+    `<button class="sg" role="option" data-n="${s.name}"><span class="nm">${s.name}</span>${s.lines.map(sgBadge).join("")}</button>`
+  ).join("");
+  const r = sgInput.getBoundingClientRect();
+  const w = W <= 640 ? W - 20 : Math.max(r.width + 60, 230);
+  sugg.style.width = w + "px";
+  sugg.style.left = Math.max(10, Math.min(r.left, W - w - 10)) + "px";
+  sugg.style.top = (r.bottom + 6) + "px";
+  sugg.hidden = false;
+}
+function hideSugg() { sugg.hidden = true; }
+sugg.addEventListener("pointerdown", e => {
+  const b = e.target.closest(".sg");
+  if (!b) return;
+  e.preventDefault(); // 保持输入框焦点，避免 blur 先关掉面板
+  sgInput.value = b.dataset.n;
+  hideSugg();
+  tryRoute();
+  const other = sgInput === inA ? inB : inA;
+  if (!stMap.has(other.value.trim())) other.focus();
+  else sgInput.blur();
 });
+[inA, inB].forEach(el => {
+  el.addEventListener("focus", () => { sgInput = el; renderSugg(); });
+  el.addEventListener("input", () => { sgInput = el; renderSugg(); });
+  el.addEventListener("blur", () => setTimeout(() => {
+    if (document.activeElement !== inA && document.activeElement !== inB) hideSugg();
+  }, 120));
+  el.addEventListener("keydown", e => {
+    if (e.key === "Escape") { hideSugg(); return; }
+    if (e.key !== "Enter") return;
+    const first = sugg.querySelector(".sg");
+    if (!sugg.hidden && first && !stMap.has(el.value.trim())) el.value = first.dataset.n;
+    hideSugg(); tryRoute(); el.blur();
+  });
+});
+
 function tryRoute() {
   const a = inA.value.trim(), b = inB.value.trim();
   if (stMap.has(a)) selA = a; // 单独填了有效起点也先给图上反馈
@@ -564,9 +590,7 @@ function showTip(s, x, y) {
 let t0 = performance.now(), clock = 0;
 function frame(now) {
   const dt = Math.min(0.05, (now - t0) / 1000); t0 = now;
-  const speed = parseFloat(speedInput.value);
-  clock += dt * speed;
-  if (autoRotate && pointers.size === 0) cam.yaw += dt * 0.07;
+  clock += dt * TRAIN_SPEED;
   if (camGoal) { // 相机平滑飞向查询路径
     const k = Math.min(1, dt * 2.5);
     cam.tx += (camGoal.tx - cam.tx) * k;
@@ -580,9 +604,10 @@ function frame(now) {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.clearRect(0, 0, W, H);
 
-  // 地面网格
+  // 地面网格（路径模式下背景整体压暗，突出查询结果）
+  const bgDim = route ? 0.45 : 1;
   ctx.lineWidth = 1;
-  ctx.strokeStyle = "rgba(90,130,190,0.08)";
+  ctx.strokeStyle = `rgba(90,130,190,${0.08 * bgDim})`;
   ctx.beginPath();
   for (let gx = -50; gx <= 50; gx += 5) {
     let m = proj(gx, -42, 0); ctx.moveTo(m[0], m[1]);
@@ -601,10 +626,10 @@ function frame(now) {
     const m = proj(p[0], p[1], 0);
     i ? ctx.lineTo(m[0], m[1]) : ctx.moveTo(m[0], m[1]);
   });
-  ctx.strokeStyle = "rgba(28,66,108,0.4)";
+  ctx.strokeStyle = `rgba(28,66,108,${0.4 * bgDim})`;
   ctx.lineWidth = Math.max(6, 1.1 * PR.F / cam.dist);
   ctx.stroke();
-  ctx.strokeStyle = "rgba(60,120,180,0.18)";
+  ctx.strokeStyle = `rgba(60,120,180,${0.18 * bgDim})`;
   ctx.lineWidth = 1;
   ctx.stroke();
 
