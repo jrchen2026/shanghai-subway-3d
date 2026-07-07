@@ -61,7 +61,8 @@
   #selName {
     font-size: 12px; color: var(--muted); letter-spacing: 0.06em;
     padding-right: 7px; border-right: 1px solid var(--panel-line); margin-right: 3px;
-    white-space: nowrap;
+    white-space: nowrap; width: 5em; text-align: center; flex: none;
+    /* 定宽（按"市域机场线"5字预留）：文字变化不再撑动两排徽章换行 */
   }
   .chip {
     display: block; cursor: pointer; border: 1px solid transparent;
@@ -108,6 +109,7 @@
     display: inline-grid; place-items: center; font-size: 11px; font-weight: 800;
     transform: translateY(4px); }
   #routeCard .rc-tr { color: var(--muted); font-size: 11px; margin: 2px 0 2px 25px; }
+  #routeCard .rc-tr.virt { color: #c2410c; font-weight: 700; }
   #routeCard .rc-foot { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--panel-line);
     color: var(--muted); font-variant-numeric: tabular-nums; }
 
@@ -202,10 +204,8 @@ const RIVER = [[121.435,31.02],[121.47,31.055],[121.48,31.09],[121.463,31.115],
 // —— 线路预处理 ——
 const lines = DATA.map((L, li) => {
   const ring = L.name === "4号线";
-  const raw = L.st.map(s => toKm(s[0], s[1]));
-  // 4号线与3号线共线段错开一点，避免完全重叠
-  const off = ring ? 0.14 : 0;
-  const pts = raw.map(p => [p[0] + off, p[1] - off * 0.4]);
+  // 共线段不再用世界坐标错开，改为渲染时按屏幕像素并排（见 segShare/slot）
+  const pts = L.st.map(s => toKm(s[0], s[1]));
   if (ring) pts.push(pts[0]);
   const cum = [0];
   for (let i = 1; i < pts.length; i++) {
@@ -215,6 +215,36 @@ const lines = DATA.map((L, li) => {
   const num = L.name.endsWith("号线") ? L.name.replace("号线", "") : L.name[0];
   return { name: L.name, num, color: L.color,
     st: L.st, pts, cum, len: cum[cum.length - 1], ring };
+});
+
+// —— 共线段检测：两线连接同一对相邻车站 → 渲染时按屏幕像素并排错开 ——
+const segShare = new Map();
+const segKey = (a, b) => a < b ? a + "|" + b : b + "|" + a;
+lines.forEach((L, li) => {
+  const n = L.st.length;
+  for (let i = 0; i + 1 < n; i++) {
+    const k = segKey(L.st[i][3], L.st[i + 1][3]);
+    if (!segShare.has(k)) segShare.set(k, []);
+    segShare.get(k).push(li);
+  }
+  if (L.ring) {
+    const k = segKey(L.st[n - 1][3], L.st[0][3]);
+    if (!segShare.has(k)) segShare.set(k, []);
+    segShare.get(k).push(li);
+  }
+});
+lines.forEach((L, li) => {
+  const n = L.st.length, m = L.pts.length - 1; // 段数（环线含闭合段）
+  L.slot = [];
+  for (let i = 0; i < m; i++) {
+    const a = L.st[i % n][3], b = L.st[(i + 1) % n][3];
+    const g = segShare.get(segKey(a, b));
+    let slot = g.length > 1 ? g.indexOf(li) - (g.length - 1) / 2 : 0;
+    // 槽位符号按站名字典序归一：两线反向走同一走廊时（如3/4号线），
+    // 屏幕法线随行进方向翻转，符号不归一会偏到同一侧重新叠住
+    if (slot && a > b) slot = -slot;
+    L.slot.push(slot);
+  }
 });
 
 // 站名 → 途经线路（用于换乘判定与悬停提示）
@@ -231,9 +261,22 @@ lines.forEach(L => L.st.forEach(s => {
 const stations = [...stMap.values()];
 stations.forEach(s => s.hub = s.lines.length > 1);
 
-const LABELS = ["人民广场","世纪大道","陆家嘴","徐家汇","静安寺","中山公园",
-  "上海火车站","虹桥火车站","龙阳路","东方体育中心","莘庄","迪士尼"]
-  .map(n => stMap.get(n)).filter(Boolean);
+// —— 重点站分层（2026-07-07 用户拍板）：白名单 ＞ 换乘线路数 ＞ 线路起终点 ——
+const WHITELIST = ["上海火车站","虹桥火车站","浦东1号2号航站楼","人民广场",
+  "龙阳路","世纪大道","徐家汇","上海南站"];
+const TERMINI = new Set();
+lines.forEach(L => {
+  TERMINI.add(L.st[0][3]);
+  if (!L.ring) TERMINI.add(L.st[L.st.length - 1][3]);
+});
+stations.forEach(s => {
+  s.tier = WHITELIST.includes(s.name) ? 0
+    : s.lines.length >= 3 ? 1
+    : TERMINI.has(s.name) ? 2
+    : s.hub ? 3 : 4;
+});
+const LBL = stations.filter(s => s.tier <= 3)
+  .sort((a, b) => a.tier - b.tier || b.lines.length - a.lines.length);
 
 const totalKm = Math.round(lines.reduce((a, l) => a + l.len, 0));
 const nSt = stations.length;
@@ -407,12 +450,26 @@ const TRANSFER_MIN = 7; // 换乘代价（分钟）：调大更倾向少换乘
 // 地铁区间约 38 km/h + 每站 1 分钟 ≈ 市区密站段 2.5 分钟/站，与实际接近
 const RUN_KMH = L => L.name === "磁浮线" ? 200 : L.name === "市域机场线" ? 110 : 38;
 const DWELL_MIN = 1.0;
+// 出站换乘（虚拟换乘，2026-07 联网核实仍存续的 4 处）：
+// 站内换不了，惩罚用出站步行+出入闸的实际分钟数，寻路自然倾向绕开
+const VIRT = {
+  "上海火车站": { a: ["1号线"], b: ["3号线", "4号线"], min: 12 },
+  "南京西路": { a: ["2号线"], b: ["12号线", "13号线"], min: 10 },
+  "长清路": { a: ["7号线"], b: ["13号线"], min: 9 },
+  "虹桥2号航站楼": { a: ["2号线"], b: ["10号线"], min: 8, note: "部分方向可站内" },
+};
+const virtOf = (name, la, lb) => {
+  const v = VIRT[name];
+  if (!v) return null;
+  return (v.a.includes(la) && v.b.includes(lb)) ||
+         (v.a.includes(lb) && v.b.includes(la)) ? v : null;
+};
 const lineIdx = new Map(lines.map((L, i) => [L.name, i]));
 const nid = (name, li) => li + "|" + name; // 节点 = 车站 × 线路
 const adj = new Map();
-function addEdge(a, b, w, km, li, seg) {
+function addEdge(a, b, w, km, li, seg, virt) {
   if (!adj.has(a)) adj.set(a, []);
-  adj.get(a).push({ to: b, w, km, li, seg });
+  adj.get(a).push({ to: b, w, km, li, seg, virt });
 }
 lines.forEach((L, li) => {
   const n = L.st.length, v = RUN_KMH(L);
@@ -430,8 +487,10 @@ lines.forEach((L, li) => {
 stations.forEach(s => {
   if (!s.hub) return;
   for (const a of s.lines) for (const b of s.lines) {
-    if (a !== b) addEdge(nid(s.name, lineIdx.get(a)), nid(s.name, lineIdx.get(b)),
-      TRANSFER_MIN, 0, -1, null);
+    if (a === b) continue;
+    const v = virtOf(s.name, a, b);
+    addEdge(nid(s.name, lineIdx.get(a)), nid(s.name, lineIdx.get(b)),
+      v ? v.min : TRANSFER_MIN, 0, -1, null, v);
   }
 });
 
@@ -470,14 +529,14 @@ function computeRoute() {
   if (!edges || !edges.length) return;
   // 边序列 → 乘车段（legs）
   const legs = [];
-  let km = 0, mins = 0, stops = 0;
+  let km = 0, mins = 0, stops = 0, pendVirt = null;
   edges.forEach(e => {
     mins += e.w;
-    if (e.li < 0) return; // 换乘边
+    if (e.li < 0) { pendVirt = e.virt || null; return; } // 换乘边
     km += e.km; stops++;
     const last = legs[legs.length - 1];
     if (last && last.li === e.li) last.idx.push(e.seg[1]);
-    else legs.push({ li: e.li, idx: [e.seg[0], e.seg[1]] });
+    else { legs.push({ li: e.li, idx: [e.seg[0], e.seg[1]], virt: pendVirt }); pendVirt = null; }
   });
   // 路径折线（世界坐标）：高亮 + 光点动画共用
   const pts = [], cum = [0];
@@ -507,7 +566,9 @@ function renderCard() {
   let h = `<div class="rc-head">${selA} → ${selB}</div>`;
   route.legs.forEach((g, i) => {
     const L = lines[g.li];
-    if (i) h += `<div class="rc-tr">↳ ${g.from} 站内换乘</div>`;
+    if (i) h += g.virt
+      ? `<div class="rc-tr virt">↳ ${g.from} ⚠ 出站换乘 约${g.virt.min}分钟（刷码30分钟内连续计费${g.virt.note ? "，" + g.virt.note : ""}）</div>`
+      : `<div class="rc-tr">↳ ${g.from} 站内换乘</div>`;
     h += `<div class="rc-leg"><span class="badge" style="background:${L.color};color:${darkText(L.color) ? "#101820" : "#fff"}">${L.num}</span><span>${L.name}&ensp;${g.from} → ${g.to}<span style="color:var(--muted);white-space:nowrap">（${g.idx.length - 1}站）</span></span></div>`;
   });
   h += `<div class="rc-foot">共 ${route.stops} 站 · 换乘 ${route.transfers.length} 次 · 约 ${route.km.toFixed(1)} km · 预计 ${mins} 分钟</div>`;
@@ -543,7 +604,8 @@ const sgBadge = ln => {
 };
 function renderSugg() {
   const q = sgInput.value.trim();
-  const list = (q ? stations.filter(s => s.name.includes(q)) : LABELS).slice(0, 8);
+  const list = (q ? stations.filter(s => s.name.includes(q))
+    : WHITELIST.map(n => stMap.get(n))).slice(0, 8);
   if (!list.length) { hideSugg(); return; }
   sugg.innerHTML = list.map(s =>
     `<button class="sg" role="option" data-n="${s.name}"><span class="nm">${s.name}</span>${s.lines.map(sgBadge).join("")}</button>`
@@ -568,11 +630,20 @@ sugg.addEventListener("pointerdown", e => {
   else sgInput.blur();
 });
 [inA, inB].forEach(el => {
-  el.addEventListener("focus", () => { sgInput = el; renderSugg(); });
+  el.addEventListener("focus", () => {
+    sgInput = el;
+    // 已选站再次点入即清空重选；原值暂存，误触不输入则 blur 时恢复
+    el.dataset.prev = el.value;
+    if (stMap.has(el.value.trim())) el.value = "";
+    renderSugg();
+  });
   el.addEventListener("input", () => { sgInput = el; renderSugg(); });
-  el.addEventListener("blur", () => setTimeout(() => {
-    if (document.activeElement !== inA && document.activeElement !== inB) hideSugg();
-  }, 120));
+  el.addEventListener("blur", () => {
+    if (!el.value.trim() && el.dataset.prev) el.value = el.dataset.prev;
+    setTimeout(() => {
+      if (document.activeElement !== inA && document.activeElement !== inB) hideSugg();
+    }, 120);
+  });
   el.addEventListener("keydown", e => {
     if (e.key === "Escape") { hideSugg(); return; }
     if (e.key !== "Enter") return;
@@ -672,11 +743,23 @@ function frame(now) {
   // 线路（单遍粗圆线条，官方色实色）
   const alphaOf = i => route ? 0.10 : (selected === -1 || selected === i) ? 1 : 0.12;
   lines.forEach((L, i) => {
+    const P = L.pts.map(p => proj(p[0], p[1], 0));
     ctx.beginPath();
-    L.pts.forEach((p, j) => {
-      const m = proj(p[0], p[1], 0);
-      j ? ctx.lineTo(m[0], m[1]) : ctx.moveTo(m[0], m[1]);
-    });
+    for (let j = 0; j < P.length; j++) {
+      // 顶点偏移 = 相邻两段（槽位×屏幕法线）的平均：共线段并排成双轨，普通段为零
+      let ox = 0, oy = 0, c = 0;
+      for (const s of [j - 1, j]) {
+        if (s < 0 || s >= L.slot.length) continue;
+        c++;
+        if (!L.slot[s]) continue;
+        const dx = P[s + 1][0] - P[s][0], dy = P[s + 1][1] - P[s][1];
+        const d = Math.hypot(dx, dy) || 1;
+        ox += (-dy / d) * L.slot[s]; oy += (dx / d) * L.slot[s];
+      }
+      const k = c ? lw * 1.15 / c : 0;
+      j ? ctx.lineTo(P[j][0] + ox * k, P[j][1] + oy * k)
+        : ctx.moveTo(P[j][0] + ox * k, P[j][1] + oy * k);
+    }
     ctx.globalAlpha = alphaOf(i);
     ctx.strokeStyle = L.color;
     ctx.lineWidth = selected === i ? lw * 1.3 : lw;
@@ -796,11 +879,12 @@ function frame(now) {
     };
     mark(selA, "▲ " + selA, "#0a8f43");
     mark(selB, "▼ " + selB, "#d7301f");
-    // 换乘胶囊放光环下方，不与顶部标注抢位
+    // 换乘胶囊放光环下方，不与顶部标注抢位；出站换乘橙色警示
     route.legs.slice(1).forEach(g => {
       const m = proj(g.pts[0][0], g.pts[0][1], 0);
       const base = Math.max(7, m[2] * 0.3);
-      drawPill(`⇋ ${g.from} 换乘${lines[g.li].name}`, m[0], m[1] + base + 18);
+      if (g.virt) drawPill(`⚠ ${g.from} 出站换乘${lines[g.li].name}`, m[0], m[1] + base + 18, "#c2410c");
+      else drawPill(`⇋ ${g.from} 换乘${lines[g.li].name}`, m[0], m[1] + base + 18);
     });
   } else if (selA && stMap.has(selA)) {
     // 已选起点、待选终点：绿色圈反馈（波纹仅电脑端）
@@ -820,24 +904,43 @@ function frame(now) {
     drawPill("▲ " + selA + " · 再点终点站", h0[0], h0[1] - 12, "#0a8f43");
   }
 
-  // 地名标注（立杆 + 黑胶囊）
+  // 地名标注（立杆 + 黑胶囊）：白名单常显，枢纽/起终点/普通站随缩放分层浮现
+  const tierMax = cam.dist < 20 ? 4 : cam.dist < 28 ? 3 : cam.dist < 45 ? 2
+    : cam.dist < 70 ? 1 : 0;
   const placed = []; // 按优先级避让，重叠只画先者
   if (!route && selA && stMap.has(selA)) { // 起点绿色胶囊先占位，地名让开
     const h = proj(stMap.get(selA).x, stMap.get(selA).y, 2.8);
     placed.push({ x: h[0], y: h[1] - 12, w: 170 });
   }
-  LABELS.forEach(s => {
+  LBL.forEach(s => {
     if (route) return; // 路径模式下只显示路径自己的标注
+    if (s.tier > tierMax) return;
     if (s.name === selA) return; // 已被选为起点，绿色胶囊接管
     if (selected !== -1 && !s.lines.includes(lines[selected].name)) return;
     const g = proj(s.x, s.y, 0), h = proj(s.x, s.y, 2.4);
     const lx = h[0], ly = h[1] - 10;
+    if (lx < -80 || lx > W + 80 || ly < -20 || ly > H + 20) return;
     if (placed.some(p => Math.abs(p.x - lx) < (p.w + 96) / 2 && Math.abs(p.y - ly) < 24)) return;
     ctx.strokeStyle = "rgba(29,33,38,0.3)"; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(g[0], g[1]); ctx.lineTo(h[0], h[1]); ctx.stroke();
     const w = drawPill(s.name, lx, ly);
     placed.push({ x: lx, y: ly, w });
   });
+  if (!route && tierMax >= 4) { // 放大到街区级：普通站直接标小字
+    ctx.font = `${W <= 640 ? 12 : 11}px Bahnschrift, "Microsoft YaHei", sans-serif`;
+    ctx.fillStyle = "#4a525b"; ctx.textAlign = "center";
+    stations.forEach(s => {
+      if (s.tier < 4 || s.name === selA) return;
+      if (selected !== -1 && !s.lines.includes(lines[selected].name)) return;
+      const m = proj(s.x, s.y, 0);
+      if (m[0] < -40 || m[0] > W + 40 || m[1] < -20 || m[1] > H + 20) return;
+      const ly = m[1] + lw * 0.38 + 13;
+      const w = ctx.measureText(s.name).width;
+      if (placed.some(p => Math.abs(p.x - m[0]) < (p.w + w) / 2 + 8 && Math.abs(p.y - ly) < 18)) return;
+      ctx.fillText(s.name, m[0], ly);
+      placed.push({ x: m[0], y: ly, w });
+    });
+  }
 
   // 悬停命中
   if (hoverPt && pointers.size === 0) {
