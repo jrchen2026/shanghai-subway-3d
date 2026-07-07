@@ -3,16 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f4f1ea">
 <title>上海轨道交通 · 全网 3D</title>
 <style>
   :root {
-    color-scheme: dark;
-    --bg: #060a13;
-    --panel: rgba(10, 16, 28, 0.72);
-    --panel-line: rgba(140, 170, 210, 0.16);
-    --ink: #e9eef6;
-    --muted: #8da0bc;
-    --faint: #55677f;
+    color-scheme: light;
+    --bg: #f4f1ea;
+    --panel: rgba(255, 255, 255, 0.88);
+    --panel-line: rgba(30, 35, 40, 0.12);
+    --ink: #1d2126;
+    --muted: #5c6670;
+    --faint: #98a1aa;
     --accent: #e3002a;
     font-family: Bahnschrift, "DIN Alternate", "Helvetica Neue", "Segoe UI",
       "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
@@ -26,7 +27,8 @@
   .hud { position: fixed; z-index: 2; }
   .panel {
     background: var(--panel); border: 1px solid var(--panel-line);
-    border-radius: 10px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border-radius: 12px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 2px 12px rgba(30, 35, 40, 0.08);
   }
 
   #title { top: 20px; left: 22px; pointer-events: none; max-width: min(72vw, 420px); }
@@ -46,7 +48,7 @@
   }
 
   .chip:focus-visible {
-    outline: 2px solid #e9eef6; outline-offset: 2px;
+    outline: 2px solid var(--ink); outline-offset: 2px;
   }
 
   #legend {
@@ -65,11 +67,11 @@
     display: block; cursor: pointer; border: 1px solid transparent;
     background: none; padding: 2px; border-radius: 8px; font: inherit;
   }
-  .chip:hover { border-color: rgba(233, 238, 246, 0.4); }
-  .chip[aria-pressed="true"] { border-color: rgba(233, 238, 246, 0.85); }
+  .chip:hover { border-color: rgba(30, 35, 40, 0.3); }
+  .chip[aria-pressed="true"] { border-color: rgba(30, 35, 40, 0.75); }
   .chip .badge {
-    width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center;
-    font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+    width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+    font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums;
   }
   .chip.dimmed { opacity: 0.32; }
 
@@ -80,9 +82,9 @@
 
   #tip {
     position: fixed; z-index: 3; pointer-events: none; display: none;
-    background: rgba(8, 13, 24, 0.92); border: 1px solid var(--panel-line);
+    background: rgba(255, 255, 255, 0.95); border: 1px solid var(--panel-line);
     border-radius: 8px; padding: 6px 10px; font-size: 12px; line-height: 1.5;
-    max-width: 240px;
+    max-width: 240px; box-shadow: 0 2px 10px rgba(30, 35, 40, 0.1);
   }
   #tip .tname { font-weight: 700; letter-spacing: 0.04em; }
   #tip .tlines { color: var(--muted); font-size: 11px; margin-top: 2px; }
@@ -90,21 +92,21 @@
   #routeBox { top: 20px; left: 50%; transform: translateX(-50%);
     display: flex; gap: 6px; align-items: center; padding: 7px 9px; }
   #routeBox input { font: inherit; font-size: 13px; color: var(--ink);
-    background: rgba(233,238,246,0.05); border: 1px solid var(--panel-line);
+    background: rgba(30,35,40,0.045); border: 1px solid var(--panel-line);
     border-radius: 7px; padding: 6px 9px; width: 112px; }
   #routeBox input::placeholder { color: var(--faint); }
-  #routeBox input:focus { outline: none; border-color: rgba(233,238,246,0.5); }
+  #routeBox input:focus { outline: none; border-color: rgba(30,35,40,0.45); }
   .rbtn { font: inherit; font-size: 13px; color: var(--muted); background: none;
     border: 1px solid transparent; border-radius: 7px; padding: 5px 7px; cursor: pointer; }
-  .rbtn:hover { color: var(--ink); border-color: rgba(140,170,210,0.35); }
+  .rbtn:hover { color: var(--ink); border-color: rgba(30,35,40,0.25); }
 
-  #routeCard { top: 210px; left: 22px; width: 240px; padding: 12px 14px;
-    font-size: 12px; line-height: 1.6; max-height: calc(100vh - 330px); overflow-y: auto; }
-  #routeCard .rc-head { font-weight: 700; font-size: 13px; letter-spacing: 0.04em; margin-bottom: 8px; }
+  #routeCard { top: 76px; right: 22px; width: 250px; padding: 12px 14px;
+    font-size: 12px; line-height: 1.6; max-height: calc(100vh - 140px); overflow-y: auto; }
+  #routeCard .rc-head { font-weight: 700; font-size: 14px; letter-spacing: 0.04em; margin-bottom: 8px; }
   #routeCard .rc-leg { display: flex; gap: 7px; align-items: baseline; margin: 4px 0; }
-  #routeCard .rc-leg .badge { flex: none; width: 18px; height: 18px; border-radius: 5px;
-    display: inline-grid; place-items: center; font-size: 11px; font-weight: 700;
-    transform: translateY(3px); }
+  #routeCard .rc-leg .badge { flex: none; width: 20px; height: 20px; border-radius: 50%;
+    display: inline-grid; place-items: center; font-size: 11px; font-weight: 800;
+    transform: translateY(4px); }
   #routeCard .rc-tr { color: var(--muted); font-size: 11px; margin: 2px 0 2px 25px; }
   #routeCard .rc-foot { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--panel-line);
     color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -114,16 +116,17 @@
   .sg { display: flex; width: 100%; box-sizing: border-box; gap: 5px; align-items: center;
     padding: 8px 9px; border-radius: 7px; cursor: pointer; font: inherit; font-size: 13px;
     color: var(--ink); background: none; border: none; text-align: left; }
-  .sg:hover, .sg:focus-visible { background: rgba(233,238,246,0.09); outline: none; }
+  .sg:hover, .sg:focus-visible { background: rgba(30,35,40,0.06); outline: none; }
   .sg .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     margin-right: 5px; }
-  .sg .b { flex: none; width: 15px; height: 15px; border-radius: 4px; font-size: 10px;
-    font-weight: 700; display: inline-grid; place-items: center; }
+  .sg .b { flex: none; width: 17px; height: 17px; border-radius: 50%; font-size: 10px;
+    font-weight: 800; display: inline-grid; place-items: center; }
 
   @media (max-width: 960px) {
     /* 平板：查询框靠右上，避免与标题重叠；16px 防 iOS 聚焦缩放 */
     #routeBox { left: auto; right: 14px; transform: none; }
     #routeBox input { font-size: 16px; }
+    #routeCard { top: 84px; right: 14px; }
   }
   @media (max-width: 640px) {
     /* 查询优先：标题缩成一行，查询框通栏置顶 */
@@ -131,16 +134,26 @@
     #title .eyebrow, #title .sub, #stats { display: none; }
     #title h1 { font-size: 15px; letter-spacing: 0.1em; }
     #routeBox { top: 38px; left: 10px; right: 10px; }
-    #routeBox input { flex: 1; width: auto; min-width: 0; }
+    #routeBox input { flex: 1; width: auto; min-width: 0; padding: 9px 10px; }
+    .rbtn { font-size: 16px; padding: 9px 10px; }
     #hint { display: none; }
-    /* 结果卡片：查询框下方通栏 */
-    #routeCard { top: 94px; left: 10px; right: 10px; width: auto; max-height: 38vh; }
-    /* 徽章栏：单行横向滑动，不再换行占屏 */
+    /* 结果卡片：查询框下方通栏，字号加大（一瞥即读） */
+    #routeCard { top: 100px; left: 10px; right: 10px; width: auto; max-height: 38vh;
+      font-size: 14px; }
+    #routeCard .rc-head { font-size: 16px; }
+    #routeCard .rc-leg .badge { width: 24px; height: 24px; font-size: 13px; }
+    #routeCard .rc-tr { font-size: 13px; margin-left: 31px; }
+    /* 候选面板：加大点击目标 */
+    .sg { font-size: 16px; padding: 12px 12px; }
+    .sg .b { width: 20px; height: 20px; font-size: 11px; }
+    /* 徽章栏：单行横向滑动，MTA 式大圆徽章 */
     #legend { bottom: 10px; left: 10px; right: 10px; transform: none;
       max-width: none; flex-wrap: nowrap; justify-content: flex-start;
       overflow-x: auto; scrollbar-width: none; }
     #legend::-webkit-scrollbar { display: none; }
     .chip, #selName { flex: none; }
+    .chip .badge { width: 32px; height: 32px; font-size: 16px; }
+    #selName { font-size: 13px; }
   }
 </style>
 </head>
@@ -148,9 +161,9 @@
 <canvas id="scene" aria-label="上海轨道交通全网三维动态图"></canvas>
 
 <div class="hud" id="title">
-  <div class="eyebrow">Shanghai Metro &middot; Night Network</div>
+  <div class="eyebrow">Shanghai Metro</div>
   <h1>上海轨道交通<span class="dot"> · </span>全网</h1>
-  <div class="sub">流动的光点是运行中的列车。拖拽旋转视角，滚轮或双指缩放，点击下方线路徽章可单独点亮一条线。</div>
+  <div class="sub">拖拽平移，滚轮或双指缩放；输入或点选起终点查换乘，点击下方线路徽章可单看一条线。</div>
   <div id="stats"></div>
 </div>
 
@@ -165,7 +178,7 @@
 
 <div class="hud panel" id="legend" role="group" aria-label="线路筛选"><span id="selName">全网</span></div>
 
-<div class="hud" id="hint">拖拽 旋转 &middot; Shift+拖拽 平移<br>滚轮 / 双指 缩放 &middot; 点击车站 设起终点</div>
+<div class="hud" id="hint">拖拽 平移 &middot; 滚轮 / 双指 缩放<br>点击车站 设起终点</div>
 
 <div id="tip"><div class="tname"></div><div class="tlines"></div></div>
 
@@ -245,8 +258,23 @@ function pointAt(L, s) {
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
 }
 
-// —— 相机 ——
-const cam = { yaw: -0.5, pitch: 0.92, dist: 84, tx: 2, ty: -6 };
+// —— 相机（固定视角：北朝上 + 轻微俯视倾角，只平移/缩放）——
+const cam = { yaw: 0, pitch: 1.15, dist: 84, tx: 0, ty: 0 };
+{ // 初始取景：按全网包围盒居中，避免构图偏斜
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  stations.forEach(s => {
+    x0 = Math.min(x0, s.x); x1 = Math.max(x1, s.x);
+    y0 = Math.min(y0, s.y); y1 = Math.max(y1, s.y);
+  });
+  cam.tx = (x0 + x1) / 2; cam.ty = (y0 + y1) / 2;
+  // F = 1.5·min(W,H)：dist ≥ spanX·F/W 填满宽、≥ spanY·sin(pitch)·F/H 填满高
+  const aw = innerWidth / innerHeight;
+  const needX = 1.5 * (x1 - x0) / Math.max(aw, 1);
+  const needY = 1.5 * (y1 - y0) * Math.sin(cam.pitch) * Math.min(aw, 1);
+  // 竖屏装不下全宽：市区优先（约 45 km 视野），远端靠平移/查询飞行
+  const need = aw >= 1 ? Math.max(needX, needY) : needY * 1.8;
+  cam.dist = Math.max(18, Math.min(180, need * 1.06));
+}
 let selected = -1;
 
 const canvas = document.getElementById("scene");
@@ -281,7 +309,7 @@ const pointers = new Map();
 let lastPinch = 0, hoverPt = null, downAt = null;
 canvas.addEventListener("pointerdown", e => {
   canvas.setPointerCapture(e.pointerId);
-  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, shift: e.shiftKey });
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   downAt = pointers.size === 1 ? { x: e.clientX, y: e.clientY } : null;
   canvas.classList.add("dragging");
   document.getElementById("legend").classList.add("faded");
@@ -291,17 +319,12 @@ canvas.addEventListener("pointermove", e => {
   const p = pointers.get(e.pointerId);
   const dx = e.clientX - p.x, dy = e.clientY - p.y;
   p.x = e.clientX; p.y = e.clientY;
-  if (pointers.size === 1) {
+  if (pointers.size === 1) { // 拖拽 = 平移（视角固定，与地图软件一致）
     if (Math.abs(dx) + Math.abs(dy) > 0) camGoal = null;
-    if (e.shiftKey || p.shift) { // 平移
-      const k = cam.dist / PR.F;
-      const mx = dx * k, my = -dy * k / Math.max(0.25, PR.sp);
-      cam.tx -= mx * PR.cy + my * PR.sy;
-      cam.ty -= -mx * PR.sy + my * PR.cy;
-    } else {
-      cam.yaw += dx * 0.005;
-      cam.pitch = Math.max(0.28, Math.min(1.45, cam.pitch + dy * 0.004));
-    }
+    const k = cam.dist / PR.F;
+    const mx = dx * k, my = -dy * k / Math.max(0.25, PR.sp);
+    cam.tx -= mx * PR.cy + my * PR.sy;
+    cam.ty -= -mx * PR.sy + my * PR.cy;
   } else if (pointers.size === 2) {
     const [a, b] = [...pointers.values()];
     const d = Math.hypot(a.x - b.x, a.y - b.y);
@@ -586,6 +609,21 @@ function showTip(s, x, y) {
   tip.style.top = Math.max(8, y - 40) + "px";
 }
 
+// —— 黑胶囊标注（Mini Metro 风）——
+function drawPill(txt, x, y, bg = "rgba(29,33,38,0.92)", fg = "#fff") {
+  const fs = W <= 640 ? 12.5 : 11.5;
+  ctx.font = `700 ${fs}px Bahnschrift, "Microsoft YaHei", sans-serif`;
+  const h = fs + 11, w = ctx.measureText(txt).width + 18;
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(x - w / 2, y - h / 2, w, h, h / 2);
+  else ctx.rect(x - w / 2, y - h / 2, w, h);
+  ctx.fillStyle = bg; ctx.fill();
+  ctx.fillStyle = fg; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(txt, x, y + 0.5);
+  ctx.textBaseline = "alphabetic";
+  return w;
+}
+
 // —— 渲染 ——
 let t0 = performance.now(), clock = 0;
 function frame(now) {
@@ -604,10 +642,11 @@ function frame(now) {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.clearRect(0, 0, W, H);
 
-  // 地面网格（路径模式下背景整体压暗，突出查询结果）
+  // 地面网格（路径模式下背景整体减淡，突出查询结果）
   const bgDim = route ? 0.45 : 1;
+  const lw = Math.max(2.6, Math.min(16, PR.F / cam.dist * 0.3)); // 线路粗细随缩放
   ctx.lineWidth = 1;
-  ctx.strokeStyle = `rgba(90,130,190,${0.08 * bgDim})`;
+  ctx.strokeStyle = `rgba(30,35,40,${0.05 * bgDim})`;
   ctx.beginPath();
   for (let gx = -50; gx <= 50; gx += 5) {
     let m = proj(gx, -42, 0); ctx.moveTo(m[0], m[1]);
@@ -626,43 +665,39 @@ function frame(now) {
     const m = proj(p[0], p[1], 0);
     i ? ctx.lineTo(m[0], m[1]) : ctx.moveTo(m[0], m[1]);
   });
-  ctx.strokeStyle = `rgba(28,66,108,${0.4 * bgDim})`;
-  ctx.lineWidth = Math.max(6, 1.1 * PR.F / cam.dist);
-  ctx.stroke();
-  ctx.strokeStyle = `rgba(60,120,180,${0.18 * bgDim})`;
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = `rgba(150,200,230,${0.5 * bgDim})`;
+  ctx.lineWidth = Math.max(8, 1.3 * PR.F / cam.dist);
   ctx.stroke();
 
-  // 线路（两遍：辉光 + 芯线）
-  const alphaOf = i => route ? 0.07 : (selected === -1 || selected === i) ? 1 : 0.10;
+  // 线路（单遍粗圆线条，官方色实色）
+  const alphaOf = i => route ? 0.10 : (selected === -1 || selected === i) ? 1 : 0.12;
   lines.forEach((L, i) => {
     ctx.beginPath();
     L.pts.forEach((p, j) => {
       const m = proj(p[0], p[1], 0);
       j ? ctx.lineTo(m[0], m[1]) : ctx.moveTo(m[0], m[1]);
     });
-    const a = alphaOf(i);
-    ctx.globalAlpha = 0.16 * a;
-    ctx.strokeStyle = L.color; ctx.lineWidth = 6.5;
-    ctx.stroke();
-    ctx.globalAlpha = (selected === i ? 1 : 0.85) * a;
-    ctx.lineWidth = selected === i ? 2.6 : 1.9;
+    ctx.globalAlpha = alphaOf(i);
+    ctx.strokeStyle = L.color;
+    ctx.lineWidth = selected === i ? lw * 1.3 : lw;
     ctx.stroke();
   });
   ctx.globalAlpha = 1;
 
-  // 车站
+  // 车站（普通站：白芯 + 线路色圈；换乘站：白芯 + 深色圈）
   const picks = [];
   lines.forEach((L, i) => {
     const a = alphaOf(i);
-    if (a < 0.5) return;
-    ctx.fillStyle = L.color;
-    ctx.globalAlpha = 0.75 * a;
+    if (a < 0.5 || lw < 4) return; // 全网视野下不画普通站，放大后才浮现
+    ctx.globalAlpha = a;
     L.st.forEach(s => {
       if (stMap.get(s[3]).hub) return;
       const p = toKm(s[0], s[1]);
       const m = proj(p[0], p[1], 0);
-      ctx.beginPath(); ctx.arc(m[0], m[1], Math.max(1.3, m[2] * 0.09), 0, 7); ctx.fill();
+      const r = Math.max(1.5, lw * 0.38);
+      ctx.beginPath(); ctx.arc(m[0], m[1], r, 0, 7);
+      ctx.fillStyle = "#ffffff"; ctx.fill();
+      ctx.strokeStyle = L.color; ctx.lineWidth = Math.max(1, r * 0.55); ctx.stroke();
     });
   });
   ctx.globalAlpha = 1;
@@ -670,48 +705,36 @@ function frame(now) {
     const vis = route ? false : (selected === -1 || s.lines.includes(lines[selected].name));
     const m = proj(s.x, s.y, 0);
     if (s.hub && vis) {
-      const r = Math.max(2.1, m[2] * 0.12);
+      const r = Math.max(2.6, lw * 0.62);
       ctx.beginPath(); ctx.arc(m[0], m[1], r, 0, 7);
-      ctx.fillStyle = "#eef3fa"; ctx.fill();
-      ctx.beginPath(); ctx.arc(m[0], m[1], r + 1.6, 0, 7);
-      ctx.strokeStyle = "rgba(238,243,250,0.35)"; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = "#ffffff"; ctx.fill();
+      ctx.strokeStyle = "#1d2126"; ctx.lineWidth = Math.max(1.4, r * 0.42); ctx.stroke();
     }
     if (vis) picks.push({ s, x: m[0], y: m[1] });
   });
 
-  // 列车光点（加法混合）
-  ctx.globalCompositeOperation = "lighter";
-  trains.forEach(tr => {
-    const L = lines[tr.li];
-    const a = alphaOf(tr.li);
-    if (a < 0.5) return;
-    let s, dir;
-    if (L.ring) {
-      s = (clock * 2.3 + tr.phase) % L.len; dir = 1;
-    } else {
-      const u = (clock * 2.3 + tr.phase) % (2 * L.len);
-      dir = u < L.len ? 1 : -1;
-      s = u < L.len ? u : 2 * L.len - u;
-    }
-    // 彗尾
-    for (let k = 7; k >= 1; k--) {
-      const q = pointAt(L, s - dir * k * 0.45);
-      const m = proj(q[0], q[1], 0.06);
-      ctx.globalAlpha = 0.10 * (1 - k / 8) * a;
-      ctx.fillStyle = L.color;
-      ctx.beginPath(); ctx.arc(m[0], m[1], 2.6 * (1 - k / 10), 0, 7); ctx.fill();
-    }
-    const h = pointAt(L, s);
-    const m = proj(h[0], h[1], 0.06);
-    ctx.globalAlpha = 0.55 * a;
-    ctx.fillStyle = L.color;
-    ctx.beginPath(); ctx.arc(m[0], m[1], 3.6, 0, 7); ctx.fill();
-    ctx.globalAlpha = 0.95 * a;
-    ctx.fillStyle = "#ffffff";
-    ctx.beginPath(); ctx.arc(m[0], m[1], 1.4, 0, 7); ctx.fill();
-  });
-  ctx.globalCompositeOperation = "source-over";
-  ctx.globalAlpha = 1;
+  // 列车（深色圆点沿线滑行；手机端全静态不绘制）
+  if (W > 640 && TRAIN_SPEED > 0) {
+    trains.forEach(tr => {
+      const L = lines[tr.li];
+      const a = alphaOf(tr.li);
+      if (a < 0.5) return;
+      let s;
+      if (L.ring) {
+        s = (clock * 2.3 + tr.phase) % L.len;
+      } else {
+        const u = (clock * 2.3 + tr.phase) % (2 * L.len);
+        s = u < L.len ? u : 2 * L.len - u;
+      }
+      const h = pointAt(L, s);
+      const m = proj(h[0], h[1], 0.06);
+      ctx.globalAlpha = 0.9 * a;
+      ctx.beginPath(); ctx.arc(m[0], m[1], Math.max(2.2, lw * 0.4), 0, 7);
+      ctx.fillStyle = "#1d2126"; ctx.fill();
+      ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1; ctx.stroke();
+    });
+    ctx.globalAlpha = 1;
+  }
 
   // 查询路径高亮
   if (route) {
@@ -723,102 +746,97 @@ function frame(now) {
         const m = proj(p[0], p[1], 0);
         j ? ctx.lineTo(m[0], m[1]) : ctx.moveTo(m[0], m[1]);
       });
-      ctx.globalAlpha = 0.35; ctx.strokeStyle = L.color; ctx.lineWidth = 8; ctx.stroke();
-      ctx.globalAlpha = 1; ctx.lineWidth = 3; ctx.stroke();
+      ctx.globalAlpha = 0.30; ctx.strokeStyle = L.color; ctx.lineWidth = lw * 2.6; ctx.stroke();
+      ctx.globalAlpha = 1; ctx.lineWidth = lw * 1.35; ctx.stroke();
     });
     // 沿途车站
     route.legs.forEach(g => {
       g.pts.forEach((p, j) => {
         const m = proj(p[0], p[1], 0);
-        ctx.beginPath(); ctx.arc(m[0], m[1], Math.max(1.6, m[2] * 0.1), 0, 7);
-        ctx.fillStyle = "#eef3fa"; ctx.fill();
+        ctx.beginPath(); ctx.arc(m[0], m[1], Math.max(1.8, lw * 0.4), 0, 7);
+        ctx.fillStyle = "#ffffff"; ctx.fill();
+        ctx.strokeStyle = "#1d2126"; ctx.lineWidth = 1; ctx.stroke();
         picks.push({ s: stMap.get(stName(g.li, g.idx[j])), x: m[0], y: m[1] });
       });
     });
-    // 换乘站：常亮圈 + 向外扩散的波纹
+    // 换乘站：常亮圈（扩散波纹仅电脑端，手机端全静态）
     route.legs.slice(1).forEach(g => {
       const p = g.pts[0], m = proj(p[0], p[1], 0);
       const base = Math.max(7, m[2] * 0.3);
-      const ph = (now * 0.0016) % 1;
       ctx.strokeStyle = lines[g.li].color;
       ctx.globalAlpha = 0.95; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(m[0], m[1], base, 0, 7); ctx.stroke();
-      ctx.globalAlpha = 0.7 * (1 - ph); ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(m[0], m[1], base + ph * 18, 0, 7); ctx.stroke();
+      if (W > 640) {
+        const ph = (now * 0.0016) % 1;
+        ctx.globalAlpha = 0.7 * (1 - ph); ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(m[0], m[1], base + ph * 18, 0, 7); ctx.stroke();
+      }
       ctx.globalAlpha = 1;
     });
-    // 光点沿路径行进
-    if (route.len > 0) {
+    // 光点沿路径行进（仅电脑端）
+    if (route.len > 0 && W > 640) {
       const sPos = (clock * 2.6) % route.len;
-      ctx.globalCompositeOperation = "lighter";
-      for (let k = 6; k >= 0; k--) {
+      for (let k = 5; k >= 0; k--) {
         const q = pointAt(route, sPos - k * 0.5);
         const m = proj(q[0], q[1], 0.08);
-        ctx.globalAlpha = k ? 0.12 * (1 - k / 7) : 0.9;
-        ctx.fillStyle = k ? "#8fd0ff" : "#ffffff";
-        ctx.beginPath(); ctx.arc(m[0], m[1], k ? 3 : 2.2, 0, 7); ctx.fill();
+        ctx.globalAlpha = k ? 0.16 * (1 - k / 6) : 1;
+        ctx.fillStyle = "#1d2126";
+        ctx.beginPath(); ctx.arc(m[0], m[1], k ? 2.6 : 3, 0, 7); ctx.fill();
+        if (!k) { ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1.2; ctx.stroke(); }
       }
-      ctx.globalCompositeOperation = "source-over";
       ctx.globalAlpha = 1;
     }
-    // 起终点 + 换乘标注
-    ctx.font = "11px Bahnschrift, 'Microsoft YaHei', sans-serif";
-    ctx.textAlign = "center";
-    const mark = (name, txt, col) => { // 起终点：立杆 + 顶部文字
+    // 起终点 + 换乘标注（胶囊）
+    const mark = (name, txt, col) => { // 起终点：立杆 + 胶囊
       const st = stMap.get(name);
       const g0 = proj(st.x, st.y, 0), h0 = proj(st.x, st.y, 2.8);
-      ctx.strokeStyle = "rgba(141,160,188,0.5)"; ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(29,33,38,0.35)"; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(g0[0], g0[1]); ctx.lineTo(h0[0], h0[1]); ctx.stroke();
-      ctx.fillStyle = col; ctx.fillText(txt, h0[0], h0[1] - 6);
+      drawPill(txt, h0[0], h0[1] - 12, col);
     };
-    mark(selA, "▲ " + selA, "#7fe08f");
-    mark(selB, "▼ " + selB, "#ff8f7f");
-    // 换乘文字放光环下方，不与顶部标注抢位
+    mark(selA, "▲ " + selA, "#0a8f43");
+    mark(selB, "▼ " + selB, "#d7301f");
+    // 换乘胶囊放光环下方，不与顶部标注抢位
     route.legs.slice(1).forEach(g => {
       const m = proj(g.pts[0][0], g.pts[0][1], 0);
       const base = Math.max(7, m[2] * 0.3);
-      ctx.fillStyle = "rgba(233,238,246,0.92)";
-      ctx.fillText(`⇋ ${g.from} 换乘${lines[g.li].name}`, m[0], m[1] + base + 16);
+      drawPill(`⇋ ${g.from} 换乘${lines[g.li].name}`, m[0], m[1] + base + 18);
     });
   } else if (selA && stMap.has(selA)) {
-    // 已选起点、待选终点：绿色波纹反馈
+    // 已选起点、待选终点：绿色圈反馈（波纹仅电脑端）
     const st = stMap.get(selA);
     const g0 = proj(st.x, st.y, 0), h0 = proj(st.x, st.y, 2.8);
-    const ph = (now * 0.0016) % 1;
-    ctx.strokeStyle = "#7fe08f";
+    ctx.strokeStyle = "#0a8f43";
     ctx.globalAlpha = 0.95; ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.arc(g0[0], g0[1], 6, 0, 7); ctx.stroke();
-    ctx.globalAlpha = 0.7 * (1 - ph); ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(g0[0], g0[1], 6 + ph * 16, 0, 7); ctx.stroke();
+    if (W > 640) {
+      const ph = (now * 0.0016) % 1;
+      ctx.globalAlpha = 0.7 * (1 - ph); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(g0[0], g0[1], 6 + ph * 16, 0, 7); ctx.stroke();
+    }
     ctx.globalAlpha = 1;
-    ctx.strokeStyle = "rgba(141,160,188,0.5)"; ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(29,33,38,0.35)"; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(g0[0], g0[1]); ctx.lineTo(h0[0], h0[1]); ctx.stroke();
-    ctx.font = "11px Bahnschrift, 'Microsoft YaHei', sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillStyle = "#7fe08f";
-    ctx.fillText("▲ " + selA + " · 再点终点站", h0[0], h0[1] - 6);
+    drawPill("▲ " + selA + " · 再点终点站", h0[0], h0[1] - 12, "#0a8f43");
   }
 
-  // 地名标注（立杆 + 文字）
-  ctx.font = "11px Bahnschrift, 'Microsoft YaHei', sans-serif";
-  ctx.textAlign = "center";
+  // 地名标注（立杆 + 黑胶囊）
   const placed = []; // 按优先级避让，重叠只画先者
-  if (!route && selA && stMap.has(selA)) { // 起点绿色标注先占位，地名让开
+  if (!route && selA && stMap.has(selA)) { // 起点绿色胶囊先占位，地名让开
     const h = proj(stMap.get(selA).x, stMap.get(selA).y, 2.8);
-    placed.push([h[0] - 60, h[1] - 11], [h[0] + 60, h[1] - 11]);
+    placed.push({ x: h[0], y: h[1] - 12, w: 170 });
   }
   LABELS.forEach(s => {
     if (route) return; // 路径模式下只显示路径自己的标注
-    if (s.name === selA) return; // 已被选为起点，绿色标注接管
+    if (s.name === selA) return; // 已被选为起点，绿色胶囊接管
     if (selected !== -1 && !s.lines.includes(lines[selected].name)) return;
     const g = proj(s.x, s.y, 0), h = proj(s.x, s.y, 2.4);
-    const lx = h[0], ly = h[1] - 5;
-    if (placed.some(p => Math.abs(p[0] - lx) < 76 && Math.abs(p[1] - ly) < 16)) return;
-    placed.push([lx, ly]);
-    ctx.strokeStyle = "rgba(141,160,188,0.35)"; ctx.lineWidth = 1;
+    const lx = h[0], ly = h[1] - 10;
+    if (placed.some(p => Math.abs(p.x - lx) < (p.w + 96) / 2 && Math.abs(p.y - ly) < 24)) return;
+    ctx.strokeStyle = "rgba(29,33,38,0.3)"; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(g[0], g[1]); ctx.lineTo(h[0], h[1]); ctx.stroke();
-    ctx.fillStyle = "rgba(233,238,246,0.88)";
-    ctx.fillText(s.name, lx, ly);
+    const w = drawPill(s.name, lx, ly);
+    placed.push({ x: lx, y: ly, w });
   });
 
   // 悬停命中
