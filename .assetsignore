@@ -1,7 +1,7 @@
 .claude/
-*.gif
-2026-07-04_上海轨道交通全网3D.html
+archive/
+docs/
 2026-07-05_上海地铁项目GitHub调研.md
-HANDOFF_20260707.md
 wrangler.jsonc
 .assetsignore
+README.md
