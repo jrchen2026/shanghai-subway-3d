@@ -18,7 +18,7 @@
     font-family: Bahnschrift, "DIN Alternate", "Helvetica Neue", "Segoe UI",
       "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
   }
-  html, body { height: 100%; margin: 0; }
+  html, body { height: 100%; margin: 0; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   body { background: var(--bg); color: var(--ink); overflow: hidden; }
   #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block;
     cursor: grab; touch-action: none; }
@@ -112,6 +112,27 @@
   #routeCard .rc-tr.virt { color: #c2410c; font-weight: 700; }
   #routeCard .rc-foot { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--panel-line);
     color: var(--muted); font-variant-numeric: tabular-nums; }
+  #routeCard .rc-share { display: flex; gap: 6px; margin-top: 8px; }
+  .rc-sbtn { flex: 1; font: inherit; font-size: 11px; color: var(--muted);
+    background: rgba(30,35,40,0.045); border: 1px solid var(--panel-line);
+    border-radius: 6px; padding: 5px 4px; cursor: pointer; }
+  .rc-sbtn:hover { color: var(--ink); border-color: rgba(30,35,40,0.3); }
+
+  #shareModal { position: fixed; inset: 0; z-index: 10; background: rgba(20,22,25,0.55);
+    display: flex; align-items: center; justify-content: center; padding: 24px; }
+  #shareModal[hidden] { display: none; }
+  #shareModal .share-box { position: relative; max-width: min(94vw, 420px); max-height: 90vh;
+    background: var(--bg); border-radius: 14px; padding: 14px; box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+    display: flex; flex-direction: column; align-items: center; gap: 8px; overflow: auto; }
+  #shareModal img { width: 100%; border-radius: 8px; display: block; }
+  #shareModal img[hidden] { display: none; }
+  #shareModal .share-hint { font-size: 12px; color: var(--muted); }
+  #shareModal .share-loading { padding: 60px 20px; font-size: 13px; color: var(--muted); }
+  #shareModal .share-error { padding: 30px 10px; font-size: 13px; color: #c2410c;
+    text-align: center; line-height: 1.6; max-width: 280px; }
+  #shareModal #shareModalClose { position: absolute; top: -14px; right: -14px; width: 30px; height: 30px;
+    border-radius: 50%; border: none; background: #1d2126; color: #fff; font-size: 14px; cursor: pointer;
+    display: grid; place-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
 
   /* 站名候选面板 */
   #sugg { position: fixed; z-index: 4; padding: 4px; max-height: 42vh; overflow-y: auto; }
@@ -145,6 +166,7 @@
     #routeCard .rc-head { font-size: 16px; }
     #routeCard .rc-leg .badge { width: 24px; height: 24px; font-size: 13px; }
     #routeCard .rc-tr { font-size: 13px; margin-left: 31px; }
+    .rc-sbtn { font-size: 13px; padding: 9px 4px; }
     /* 候选面板：加大点击目标 */
     .sg { font-size: 16px; padding: 12px 12px; }
     .sg .b { width: 20px; height: 20px; font-size: 11px; }
@@ -183,6 +205,16 @@
 <div class="hud" id="hint">拖拽 平移 &middot; 滚轮 / 双指 缩放<br>点击车站 设起终点</div>
 
 <div id="tip"><div class="tname"></div><div class="tlines"></div></div>
+
+<div id="shareModal" hidden>
+  <div class="share-box">
+    <button id="shareModalClose" aria-label="关闭">✕</button>
+    <div class="share-loading">生成中…</div>
+    <div class="share-error" hidden>图片生成失败，换个方式再试一次，或直接用"复制链接"分享。</div>
+    <img alt="换乘路径分享图" hidden>
+    <div class="share-hint" hidden>长按图片保存或发送</div>
+  </div>
+</div>
 
 <script>
 "use strict";
@@ -260,6 +292,10 @@ lines.forEach(L => L.st.forEach(s => {
 }));
 const stations = [...stMap.values()];
 stations.forEach(s => s.hub = s.lines.length > 1);
+const stIdx = new Map(stations.map((s, i) => [s.name, i])); // 站名→序号，用于分享链接短码
+// 站名拼音索引（脚本预生成：全拼小写 + 首字母缩写，用 | 拼接便于子串匹配）
+const PINYIN = {"莘庄":"shzh|shenzhuang","外环路":"whl|waihuanlu","莲花路":"lhl|lianhualu","锦江乐园":"jjly|jinjiangleyuan","上海南站":"shhnzh|shanghainanzhan","漕宝路":"cbl|caobaolu","上海体育馆":"shhtyg|shanghaitiyuguan","徐家汇":"xjh|xujiahui","衡山路":"hshl|hengshanlu","常熟路":"chshl|changshulu","陕西南路":"shxnl|shanxinanlu","一大会址·黄陂南路":"ydhzhhbnl|yidahuizhi·huangbeinanlu","人民广场":"rmgch|renminguangchang","新闸路":"xzhl|xinzhalu","汉中路":"hzhl|hanzhonglu","上海火车站":"shhhchzh|shanghaihuochezhan","中山北路":"zhshbl|zhongshanbeilu","延长路":"ychl|yanchanglu","上海马戏城":"shhmxch|shanghaimaxicheng","汶水路":"wshl|wenshuilu","彭浦新村":"ppxc|pengpuxincun","共康路":"gkl|gongkanglu","通河新村":"thxc|tonghexincun","呼兰路":"hll|hulanlu","共富新村":"gfxc|gongfuxincun","宝安公路":"bgl|baoangonglu","友谊西路":"yyxl|youyixilu","富锦路":"fjl|fujinlu","浦东1号2号航站楼":"pdhhhzhl|pudong1hao2haohangzhanlou","海天三路":"htsl|haitiansanlu","远东大道":"yddd|yuandongdadao","凌空路":"lkl|lingkonglu","川沙":"chsh|chuansha","华夏东路":"hxdl|huaxiadonglu","创新中路":"chxzhl|chuangxinzhonglu","唐镇":"tzh|tangzhen","广兰路":"gll|guanglanlu","金科路":"jkl|jinkelu","张江高科":"zhjgk|zhangjianggaoke","龙阳路":"lyl|longyanglu","世纪公园":"shjgy|shijigongyuan","上海科技馆":"shhkjg|shanghaikejiguan","世纪大道":"shjdd|shijidadao","浦东南路(原东昌路)":"pdnlydchl|pudongnanlu(yuandongchanglu)","陆家嘴":"ljz|lujiazui","南京东路":"njdl|nanjingdonglu","南京西路":"njxl|nanjingxilu","静安寺":"js|jingansi","江苏路":"jsl|jiangsulu","中山公园":"zhshgy|zhongshangongyuan","娄山关路":"lshgl|loushanguanlu","威宁路":"wnl|weininglu","北新泾":"bxj|beixinjing","淞虹路":"shl|songhonglu","虹桥2号航站楼":"hqhhzhl|hongqiao2haohangzhanlou","虹桥火车站":"hqhchzh|hongqiaohuochezhan","国家会展中心(2号线)":"gjhzhzhxhx|guojiahuizhanzhongxin(2haoxian)","蟠祥路·国家会计学院":"pxlgjkjxy|panxianglu·guojiakuaijixueyuan","江杨北路":"jybl|jiangyangbeilu","铁力路":"tll|tielilu","友谊路":"yyl|youyilu","宝杨路":"byl|baoyanglu","水产路":"shchl|shuichanlu","淞滨路":"sbl|songbinlu","张华浜":"zhhb|zhanghuabang","淞发路":"sfl|songfalu","长江南路":"chjnl|changjiangnanlu","殷高西路":"ygxl|yingaoxilu","江湾镇":"jwzh|jiangwanzhen","大柏树":"dbsh|dabaishu","赤峰路":"chfl|chifenglu","虹口足球场":"hkzqch|hongkouzuqiuchang","东宝兴路":"dbxl|dongbaoxinglu","宝山路":"bshl|baoshanlu","中潭路":"zhtl|zhongtanlu","镇坪路":"zhpl|zhenpinglu","曹杨路":"cyl|caoyanglu","金沙江路":"jshjl|jinshajianglu","延安西路":"yxl|yananxilu","虹桥路":"hql|hongqiaolu","宜山路":"yshl|yishanlu","漕溪路":"cxl|caoxilu","龙漕路":"lcl|longcaolu","石龙路":"shll|shilonglu","海伦路":"hll|hailunlu","临平路":"lpl|linpinglu","大连路":"dll|dalianlu","杨树浦路":"yshpl|yangshupulu","浦东大道":"pddd|pudongdadao","向城路":"xchl|xiangchenglu","蓝村路":"lcl|lancunlu","塘桥":"tq|tangqiao","南浦大桥":"npdq|nanpudaqiao","西藏南路":"xznl|xizangnanlu","鲁班路":"lbl|lubanlu","大木桥路":"dmql|damuqiaolu","东安路":"dl|donganlu","上海体育场":"shhtych|shanghaitiyuchang","春申路":"chshl|chunshenlu","银都路":"ydl|yindoulu","颛桥":"zhq|zhuanqiao","北桥":"bq|beiqiao","剑川路":"jchl|jianchuanlu","东川路":"dchl|dongchuanlu","江川路":"jchl|jiangchuanlu","西渡":"xd|xidu","萧塘":"xt|xiaotang","奉浦大道":"fpdd|fengpudadao","环城东路":"hchdl|huanchengdonglu","望园路":"wyl|wangyuanlu","金海湖":"jhh|jinhaihu","奉贤新城":"fxxch|fengxianxincheng","东方体育中心":"dftyzhx|dongfangtiyuzhongxin","灵岩南路":"lynl|lingyannanlu","上南路":"shnl|shangnanlu","华夏西路":"hxxl|huaxiaxilu","高青路":"gql|gaoqinglu","东明路":"dml|dongminglu","高科西路":"gkxl|gaokexilu","临沂新村":"lyxc|linyixincun","上海儿童医学中心":"shhtyxzhx|shanghaiertongyixuezhongxin","浦电路":"pdl|pudianlu","源深体育中心":"yshtyzhx|yuanshentiyuzhongxin","民生路":"mshl|minshenglu","北洋泾路":"byjl|beiyangjinglu","德平路":"dpl|depinglu","云山路":"yshl|yunshanlu","金桥路":"jql|jinqiaolu","博兴路":"bxl|boxinglu","五莲路":"wll|wulianlu","巨峰路":"jfl|jufenglu","东靖路":"djl|dongjinglu","五洲大道":"wzhdd|wuzhoudadao","洲海路":"zhhl|zhouhailu","外高桥保税区南":"wgqbshqn|waigaoqiaobaoshuiqunan","航津路":"hjl|hangjinlu","外高桥保税区北":"wgqbshqb|waigaoqiaobaoshuiqubei","港城路":"gchl|gangchenglu","花木路":"hml|huamulu","芳华路":"fhl|fanghualu","锦绣路":"jxl|jinxiulu","杨高南路":"ygnl|yanggaonanlu","云台路":"ytl|yuntailu","耀华路":"yhl|yaohualu","长清路":"chql|changqinglu","后滩":"ht|houtan","龙华中路":"lhzhl|longhuazhonglu","肇嘉浜路":"zhjbl|zhaojiabanglu","昌平路":"chpl|changpinglu","长寿路":"chshl|changshoulu","岚皋路":"lgl|langaolu","新村路":"xcl|xincunlu","大华三路":"dhsl|dahuasanlu","行知路":"xzhl|xingzhilu","大场镇":"dchzh|dachangzhen","场中路":"chzhl|changzhonglu","上大路":"shdl|shangdalu","南陈路":"nchl|nanchenlu","上海大学":"shhdx|shanghaidaxue","祁华路":"qhl|qihualu","顾村公园":"gcgy|gucungongyuan","刘行":"lx|liuxing","潘广路":"pgl|panguanglu","罗南新村":"lnxc|luonanxincun","美兰湖":"mlh|meilanhu","沈杜公路":"shdgl|shendugonglu","联航路":"lhl|lianhanglu","江月路":"jyl|jiangyuelu","浦江镇":"pjzh|pujiangzhen","芦恒路":"lhl|luhenglu","凌兆新村":"lzhxc|lingzhaoxincun","杨思":"ys|yangsi","成山路":"chshl|chengshanlu","中华艺术宫":"zhhyshg|zhonghuayishugong","陆家浜路":"ljbl|lujiabanglu","老西门":"lxm|laoximen","大世界":"dshj|dashijie","曲阜路":"qfl|qufulu","中兴路":"zhxl|zhongxinglu","西藏北路":"xzbl|xizangbeilu","曲阳路":"qyl|quyanglu","四平路":"spl|sipinglu","鞍山新村":"shxc|anshanxincun","江浦路":"jpl|jiangpulu","黄兴路":"hxl|huangxinglu","延吉中路":"yjzhl|yanjizhonglu","黄兴公园":"hxgy|huangxinggongyuan","翔殷路":"xyl|xiangyinlu","嫩江路":"njl|nenjianglu","市光路":"shgl|shiguanglu","曹路":"cl|caolu","民雷路":"mll|minleilu","顾唐路":"gtl|gutanglu","金海路":"jhl|jinhailu","金吉路":"jjl|jinjilu","金桥":"jq|jinqiao","台儿庄路":"tzhl|taierzhuanglu","蓝天路":"ltl|lantianlu","芳甸路":"fdl|fangdianlu","杨高中路":"ygzhl|yanggaozhonglu","商城路":"shchl|shangchenglu","小南门":"xnm|xiaonanmen","马当路":"mdl|madanglu","打浦桥":"dpq|dapuqiao","嘉善路":"jshl|jiashanlu","桂林路":"gll|guilinlu","漕河泾开发区":"chjkfq|caohejingkaifaqu","合川路":"hchl|hechuanlu","星中路":"xzhl|xingzhonglu","七宝":"qb|qibao","中春路":"zhchl|zhongchunlu","九亭":"jt|jiuting","泗泾":"sj|sijing","佘山":"shsh|sheshan","洞泾":"dj|dongjing","松江大学城":"sjdxch|songjiangdaxuecheng","松江新城":"sjxch|songjiangxincheng","松江体育中心":"sjtyzhx|songjiangtiyuzhongxin","醉白池":"zbch|zuibaichi","上海松江站":"shhsjzh|shanghaisongjiangzhan","基隆路":"jll|jilonglu","高桥":"gq|gaoqiao","高桥西":"gqx|gaoqiaoxi","双江路":"shjl|shuangjianglu","国帆路":"gfl|guofanlu","新江湾城":"xjwch|xinjiangwancheng","殷高东路":"ygdl|yingaodonglu","三门路":"sml|sanmenlu","江湾体育场":"jwtych|jiangwantiyuchang","五角场":"wjch|wujiaochang","国权路":"gql|guoquanlu","同济大学":"tjdx|tongjidaxue","邮电新村":"ydxc|youdianxincun","四川北路":"schbl|sichuanbeilu","天潼路":"ttl|tiantonglu","豫园":"yy|yuyuan","一大会址·新天地":"ydhzhxtd|yidahuizhi·xintiandi","上海图书馆":"shhtshg|shanghaitushuguan","交通大学":"jtdx|jiaotongdaxue","宋园路":"syl|songyuanlu","伊犁路":"yll|yililu","水城路":"shchl|shuichenglu","龙溪路":"lxl|longxilu","上海动物园":"shhdwy|shanghaidongwuyuan","虹桥1号航站楼":"hqhhzhl|hongqiao1haohangzhanlou","迪士尼":"dshn|dishini","康新公路":"kxgl|kangxingonglu","秀沿路":"xyl|xiuyanlu","罗山路":"lshl|luoshanlu","御桥":"yq|yuqiao","康恒路":"khl|kanghenglu","浦三路":"psl|pusanlu","三林东":"sld|sanlindong","三林":"sl|sanlin","龙耀路":"lyl|longyaolu","云锦路":"yjl|yunjinlu","龙华":"lh|longhua","上海游泳馆":"shhyyg|shanghaiyouyongguan","隆德路":"ldl|longdelu","枫桥路":"fql|fengqiaolu","真如":"zhr|zhenru","上海西站":"shhxzh|shanghaixizhan","李子园":"lzy|liziyuan","祁连山路":"qlshl|qilianshanlu","武威路":"wwl|wuweilu","桃浦新村":"tpxc|taopuxincun","南翔":"nx|nanxiang","陈翔公路":"chxgl|chenxianggonglu","马陆":"ml|malu","嘉定新城":"jdxch|jiadingxincheng","上海赛车场":"shhschch|shanghaisaichechang","昌吉东路":"chjdl|changjidonglu","上海汽车城":"shhqchch|shanghaiqichecheng","安亭":"t|anting","兆丰路":"zhfl|zhaofenglu","光明路":"gml|guangminglu","花桥":"hq|huaqiao","七莘路":"qshl|qishenlu","虹莘路":"hshl|hongshenlu","顾戴路":"gdl|gudailu","东兰路":"dll|donglanlu","虹梅路":"hml|hongmeilu","虹漕路":"hcl|hongcaolu","桂林公园":"glgy|guilingongyuan","国际客运中心":"gjkyzhx|guojikeyunzhongxin","提篮桥":"tlq|tilanqiao","江浦公园":"jpgy|jiangpugongyuan","宁国路":"ngl|ningguolu","隆昌路":"lchl|longchanglu","爱国路":"gl|aiguolu","复兴岛":"fxd|fuxingdao","东陆路":"dll|donglulu","杨高北路":"ygbl|yanggaobeilu","金京路":"jjl|jinjinglu","申江路":"shjl|shenjianglu","金运路":"jyl|jinyunlu","金沙江西路":"jshjxl|jinshajiangxilu","丰庄":"fzh|fengzhuang","祁连山南路":"qlshnl|qilianshannanlu","真北路":"zhbl|zhenbeilu","大渡河路":"ddhl|daduhelu","武宁路":"wnl|wuninglu","江宁路":"jnl|jiangninglu","自然博物馆":"zrbwg|ziranbowuguan","淮海中路":"hhzhl|huaihaizhonglu","世博会博物馆":"shbhbwg|shibohuibowuguan","世博大道":"shbdd|shibodadao","华鹏路":"hpl|huapenglu","下南路":"xnl|xiananlu","北蔡":"bc|beicai","陈春路":"chchl|chenchunlu","莲溪路":"lxl|lianxilu","华夏中路":"hxzhl|huaxiazhonglu","中科路":"zhkl|zhongkelu","学林路":"xll|xuelinlu","张江路":"zhjl|zhangjianglu","封浜":"fb|fengbang","乐秀路":"lxl|lexiulu","临洮路":"ltl|lintaolu","嘉怡路":"jyl|jiayilu","定边路":"dbl|dingbianlu","真新新村":"zhxxc|zhenxinxincun","真光路":"zhgl|zhenguanglu","铜川路":"tchl|tongchuanlu","中宁路":"zhnl|zhongninglu","武定路":"wdl|wudinglu","浦东南路":"pdnl|pudongnanlu","源深路":"yshl|yuanshenlu","昌邑路":"chyl|changyilu","歇浦路":"xpl|xiepulu","黄杨路":"hyl|huangyanglu","云顺路":"yshl|yunshunlu","浦东足球场":"pdzqch|pudongzuqiuchang","金粤路":"jyl|jinyuelu","桂桥路":"gql|guiqiaolu","锦秋路":"jql|jinqiulu","丰翔路":"fxl|fengxianglu","南大路":"ndl|nandalu","祁安路":"ql|qianlu","古浪路":"gll|gulanglu","武威东路":"wwdl|wuweidonglu","梅岭北路":"mlbl|meilingbeilu","长风公园":"chfgy|changfenggongyuan","红宝石路":"hbshl|hongbaoshilu","姚虹路":"yhl|yaohonglu","吴中路":"wzhl|wuzhonglu","华东理工大学":"hdlgdx|huadongligongdaxue","罗秀路":"lxl|luoxiulu","朱梅路":"zhml|zhumeilu","景洪路":"jhl|jinghonglu","虹梅南路":"hmnl|hongmeinanlu","景西路":"jxl|jingxilu","曙建路":"shjl|shujianlu","双柏路":"shbl|shuangbailu","元江路":"yjl|yuanjianglu","永德路":"ydl|yongdelu","紫竹高新区":"zzhgxq|zizhugaoxinqu","周浦东":"zhpd|zhoupudong","鹤沙航城":"hshhch|heshahangcheng","航头东":"htd|hangtoudong","新场":"xch|xinchang","野生动物园":"yshdwy|yeshengdongwuyuan","惠南":"hn|huinan","惠南东":"hnd|huinandong","书院":"shy|shuyuan","临港大道":"lgdd|lingangdadao","滴水湖":"dshh|dishuihu","国家会展中心(17号线)":"gjhzhzhxhx|guojiahuizhanzhongxin(17haoxian)","蟠龙路":"pll|panlonglu","徐盈路":"xyl|xuyinglu","徐泾北城":"xjbch|xujingbeicheng","嘉松中路":"jszhl|jiasongzhonglu","赵巷":"zhx|zhaoxiang","汇金路":"hjl|huijinlu","青浦新城":"qpxch|qingpuxincheng","漕盈路":"cyl|caoyinglu","淀山湖大道":"dshhdd|dianshanhudadao","朱家角":"zhjj|zhujiajiao","东方绿舟":"dflzh|dongfanglüzhou","西岑":"xc|xicen","康文路":"kwl|kangwenlu","爱辉路":"hl|aihuilu","长江西路":"chjxl|changjiangxilu","通南路":"tnl|tongnanlu","殷高路":"ygl|yingaolu","上海财经大学":"shhcjdx|shanghaicaijingdaxue","复旦大学":"fddx|fudandaxue","抚顺路":"fshl|fushunlu","平凉路":"pll|pinglianglu","丹阳路":"dyl|danyanglu","迎春路":"ychl|yingchunlu","芳芯路":"fxl|fangxinlu","北中路":"bzhl|beizhonglu","康桥":"kq|kangqiao","周浦":"zhp|zhoupu","繁荣路":"frl|fanronglu","沈梅路":"shml|shenmeilu","鹤涛路":"htl|hetaolu","下沙":"xsh|xiasha","航头":"ht|hangtou","三林南":"sln|sanlinnan","康桥东":"kqd|kangqiaodong","上海国际旅游度假区":"shhgjlydjq|shanghaiguojilüyoudujiaqu","三鲁公路":"slgl|sanlugonglu","闵瑞路":"mrl|minruilu","浦航路":"phl|puhanglu","东城一路":"dchyl|dongchengyilu","汇臻路":"hzhl|huizhenlu"};
+
 
 // —— 重点站分层（2026-07-07 用户拍板）：白名单 ＞ 换乘线路数 ＞ 线路起终点 ——
 const WHITELIST = ["上海火车站","虹桥火车站","浦东1号2号航站楼","人民广场",
@@ -558,10 +594,11 @@ function computeRoute() {
   selName.textContent = "路径";
   renderCard();
   flyTo(pts);
+  history.replaceState(null, "", "#r=" + stIdx.get(selA) + "," + stIdx.get(selB));
 }
 
+const routeCardEl = document.getElementById("routeCard");
 function renderCard() {
-  const card = document.getElementById("routeCard");
   const mins = Math.round(route.mins);
   let h = `<div class="rc-head">${selA} → ${selB}</div>`;
   route.legs.forEach((g, i) => {
@@ -572,15 +609,145 @@ function renderCard() {
     h += `<div class="rc-leg"><span class="badge" style="background:${L.color};color:${darkText(L.color) ? "#101820" : "#fff"}">${L.num}</span><span>${L.name}&ensp;${g.from} → ${g.to}<span style="color:var(--muted);white-space:nowrap">（${g.idx.length - 1}站）</span></span></div>`;
   });
   h += `<div class="rc-foot">共 ${route.stops} 站 · 换乘 ${route.transfers.length} 次 · 约 ${route.km.toFixed(1)} km · 预计 ${mins} 分钟</div>`;
-  card.innerHTML = h; card.hidden = false;
+  h += `<div class="rc-share"><button class="rc-sbtn" id="rcCopyBtn">🔗 复制链接</button><button class="rc-sbtn" id="rcImgBtn">🖼 生成分享图</button></div>`;
+  routeCardEl.innerHTML = h; routeCardEl.hidden = false;
+  document.getElementById("rcCopyBtn").addEventListener("click", copyShareLink);
+  document.getElementById("rcImgBtn").addEventListener("click", openShareCard);
 }
 
 function clearRoute() {
   route = null; selA = ""; selB = ""; camGoal = null;
   inA.value = ""; inB.value = "";
-  document.getElementById("routeCard").hidden = true;
+  routeCardEl.hidden = true;
   if (selected === -1) selName.textContent = "全网";
+  history.replaceState(null, "", location.pathname + location.search);
 }
+
+// —— 分享：链接（URL hash 用车站序号短码代替全名，打开即自动查询）——
+function copyText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text);
+  const ta = document.createElement("textarea");
+  ta.value = text; ta.style.position = "fixed"; ta.style.left = "-9999px";
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand("copy"); } catch (e) {}
+  document.body.removeChild(ta);
+  return Promise.resolve();
+}
+function copyShareLink(e) {
+  const btn = e.currentTarget;
+  const url = location.origin + location.pathname + "#r=" + stIdx.get(selA) + "," + stIdx.get(selB);
+  copyText(url).then(() => {
+    btn.textContent = "已复制 ✓";
+    setTimeout(() => { btn.textContent = "🔗 复制链接"; }, 1500);
+  });
+}
+
+// —— 分享：卡图（把当前路径渲染成一张可长按保存的图片）——
+// 布局思路（2026-07-14 与 advisor 讨论定稿）：结论数字（时长/换乘）上提到头部大字区，
+// 给"收图的人"一眼看到钩子；正文改成地铁产品常见的"路线脊柱"——左侧一条按线路色连续
+// 涂色的竖线贯穿各换乘段，比纯文字列表更有产品识别度，成本仍是纯 canvas 绘制，不加外部资源。
+function buildShareCard() {
+  const legs = route.legs;
+  const W2 = 720, rowH = 64, trH = 34, padTop = 214, padBot = 90, DPR2 = 3, spineX = 48;
+  let hgt = padTop;
+  legs.forEach((g, i) => { if (i) hgt += trH; hgt += rowH; });
+  hgt += padBot;
+  const c = document.createElement("canvas");
+  c.width = W2 * DPR2; c.height = hgt * DPR2;
+  const cx = c.getContext("2d");
+  cx.scale(DPR2, DPR2);
+  cx.fillStyle = "#f4f1ea"; cx.fillRect(0, 0, W2, hgt);
+  const FONT = `Bahnschrift, "Microsoft YaHei", sans-serif`;
+  const mins = Math.round(route.mins);
+
+  cx.fillStyle = "#98a1aa"; cx.font = `600 12px ${FONT}`;
+  cx.fillText("SHANGHAI METRO · 换乘查询", 32, 34);
+  cx.fillStyle = "#1d2126"; cx.font = `700 22px ${FONT}`;
+  cx.fillText(`${selA} → ${selB}`, 32, 66);
+
+  // 结论数字区：给"收图的人"一眼看到钩子，不是给查询者看过程
+  cx.fillStyle = "rgba(30,35,40,0.045)";
+  cx.beginPath(); cx.roundRect ? cx.roundRect(32, 84, W2 - 64, 96, 12) : cx.rect(32, 84, W2 - 64, 96);
+  cx.fill();
+  cx.fillStyle = "#1d2126"; cx.font = `800 44px ${FONT}`; cx.textBaseline = "alphabetic";
+  cx.fillText(`${mins}`, 52, 152);
+  const minsW = cx.measureText(`${mins}`).width;
+  cx.font = `700 18px ${FONT}`; cx.fillText("分钟", 52 + minsW + 6, 152);
+  cx.fillStyle = "#5c6670"; cx.font = `14px ${FONT}`;
+  cx.fillText(`换乘 ${route.transfers.length} 次 · 共 ${route.stops} 站 · 约 ${route.km.toFixed(1)} km`, 52, 174);
+
+  let y = padTop;
+  legs.forEach((g, i) => {
+    const L = lines[g.li];
+    const rowTop = y;
+    if (i) {
+      cx.strokeStyle = lines[legs[i - 1].li].color; cx.lineWidth = 6; cx.lineCap = "round";
+      cx.beginPath(); cx.moveTo(spineX, y - rowH * 0 ); cx.lineTo(spineX, y + trH); cx.stroke();
+      cx.fillStyle = g.virt ? "#c2410c" : "#5c6670";
+      cx.font = `600 13px ${FONT}`;
+      cx.fillText(g.virt ? `⚠ 出站换乘 约${g.virt.min}分钟` : "站内换乘", spineX + 26, y + trH / 2 + 4);
+      y += trH;
+    }
+    // 竖线脊柱：本段用本段线路色贯穿整行高度
+    cx.strokeStyle = L.color; cx.lineWidth = 6; cx.lineCap = "round";
+    cx.beginPath(); cx.moveTo(spineX, y); cx.lineTo(spineX, y + rowH); cx.stroke();
+    // 节点：段起点画一个白底圈（换乘/起点标记），线路徽章贴在脊柱右侧
+    cx.beginPath(); cx.arc(spineX, y, 7, 0, 7);
+    cx.fillStyle = "#f4f1ea"; cx.fill(); cx.strokeStyle = L.color; cx.lineWidth = 3; cx.stroke();
+    const bx = spineX + 30, by = y + rowH / 2 - 3, r = 18;
+    cx.beginPath(); cx.arc(bx, by, r, 0, 7);
+    cx.fillStyle = L.color; cx.fill();
+    cx.fillStyle = darkText(L.color) ? "#101820" : "#fff";
+    cx.font = `800 15px ${FONT}`; cx.textAlign = "center"; cx.textBaseline = "middle";
+    cx.fillText(L.num, bx, by + 1);
+    cx.textAlign = "left"; cx.textBaseline = "alphabetic";
+    cx.fillStyle = "#1d2126"; cx.font = `700 16px ${FONT}`;
+    cx.fillText(`${L.name}  ${g.from} → ${g.to}`, bx + 30, y + rowH / 2 - 2);
+    cx.fillStyle = "#98a1aa"; cx.font = `12px ${FONT}`;
+    cx.fillText(`${g.idx.length - 1} 站`, bx + 30, y + rowH / 2 + 17);
+    if (i === legs.length - 1) { // 终点：脊柱末端加一个实心收尾点
+      cx.beginPath(); cx.arc(spineX, y + rowH, 7, 0, 7);
+      cx.fillStyle = L.color; cx.fill();
+    }
+    y += rowH;
+  });
+
+  cx.strokeStyle = "rgba(30,35,40,0.14)"; cx.lineWidth = 1;
+  cx.beginPath(); cx.moveTo(32, y + 14); cx.lineTo(W2 - 32, y + 14); cx.stroke();
+  cx.fillStyle = "#98a1aa"; cx.font = `12px ${FONT}`;
+  cx.fillText("shmetro3d.com", 32, y + 38);
+  try {
+    return c.toDataURL("image/png"); // 低端设备画布内存不足/受限环境可能抛错，交给调用方兜底
+  } catch (e) {
+    return null;
+  }
+}
+const shareModal = document.getElementById("shareModal");
+const shareImg = shareModal.querySelector("img");
+const shareLoading = shareModal.querySelector(".share-loading");
+const shareErrorEl = shareModal.querySelector(".share-error");
+const shareHint = shareModal.querySelector(".share-hint");
+function shareModalState(state) { // "loading" | "ready" | "error"
+  shareLoading.hidden = state !== "loading";
+  shareErrorEl.hidden = state !== "error";
+  shareImg.hidden = state !== "ready";
+  shareHint.hidden = state !== "ready";
+}
+function openShareCard() {
+  shareModal.hidden = false;
+  shareModalState("loading");
+  // 注意：这里故意不用 requestAnimationFrame 延后生成——rAF 在页面被切到后台/不可见时
+  // 会被浏览器整体挂起、永不触发（不同于 setTimeout 只是被节流），若用户切个后台再回来，
+  // "生成中" 会卡死。canvas 绘制 + toDataURL 本身够快，直接同步做，可靠性优先于这点延迟。
+  const url = buildShareCard();
+  if (!url) { shareModalState("error"); return; }
+  shareImg.onload = () => shareModalState("ready");
+  shareImg.onerror = () => shareModalState("error");
+  shareImg.src = url;
+}
+function closeShareCard() { shareModal.hidden = true; }
+shareModal.addEventListener("click", e => { if (e.target === shareModal) closeShareCard(); });
+document.getElementById("shareModalClose").addEventListener("click", closeShareCard);
 
 function flyTo(pts) {
   let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
@@ -602,9 +769,25 @@ const sgBadge = ln => {
   const L = lines[lineIdx.get(ln)];
   return `<span class="b" style="background:${L.color};color:${darkText(L.color) ? "#101820" : "#fff"}">${L.num}</span>`;
 };
+// 站名匹配：中文子串优先，其次拼音全拼/首字母（长站名/生僻字免打字场景）
+function matchScore(s, q) {
+  if (s.name.startsWith(q)) return 0;
+  if (s.name.includes(q)) return 3;
+  const py = PINYIN[s.name];
+  if (!py) return -1;
+  const [initials, full] = py.split("|");
+  if (initials.startsWith(q)) return 1;
+  if (full.startsWith(q)) return 2;
+  if (initials.includes(q) || full.includes(q)) return 4;
+  return -1;
+}
 function renderSugg() {
   const q = sgInput.value.trim();
-  const list = (q ? stations.filter(s => s.name.includes(q))
+  const ql = q.toLowerCase();
+  const list = (q ? stations.map(s => [s, matchScore(s, ql)])
+      .filter(([, sc]) => sc >= 0)
+      .sort((a, b) => a[1] - b[1])
+      .map(([s]) => s)
     : WHITELIST.map(n => stMap.get(n))).slice(0, 8);
   if (!list.length) { hideSugg(); return; }
   sugg.innerHTML = list.map(s =>
@@ -667,6 +850,22 @@ document.getElementById("swapBtn").addEventListener("click", () => {
   tryRoute();
 });
 document.getElementById("routeClear").addEventListener("click", clearRoute);
+
+// —— 分享链接打开：URL #r=起点序号,终点序号 自动查询（短码；兼容旧版全名编码链接）——
+{
+  const m = location.hash.match(/^#r=([^,]+),(.+)$/);
+  if (m) {
+    let a, b;
+    if (/^\d+$/.test(m[1]) && /^\d+$/.test(m[2])) { // 新版短码：车站序号
+      a = stations[+m[1]]?.name; b = stations[+m[2]]?.name;
+    } else { // 旧版链接兼容：完整站名 percent-encode
+      a = decodeURIComponent(m[1]); b = decodeURIComponent(m[2]);
+    }
+    if (a && b && stMap.has(a) && stMap.has(b) && a !== b) {
+      inA.value = a; inB.value = b; selA = a; selB = b; computeRoute();
+    }
+  }
+}
 
 // —— 悬停提示 ——
 const tip = document.getElementById("tip");
